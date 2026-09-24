@@ -1,5 +1,5 @@
 import { mockProducts } from "@agentguard/shared";
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 
 type Scenario = {
   label: string;
@@ -50,31 +50,50 @@ function DecisionIcon({ status }: Pick<Scenario, "status">) {
 
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
+  const navigationLockRef = useRef(false);
+  const navigationTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visibleEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
+    const updateActiveSection = () => {
+      if (navigationLockRef.current) return;
 
-        if (visibleEntry) {
-          setActiveSection(visibleEntry.target.id as SectionId);
-        }
-      },
-      {
-        rootMargin: "-18% 0px -62% 0px",
-        threshold: [0, 0.25, 0.5, 0.75]
+      const isAtPageBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      if (isAtPageBottom) {
+        setActiveSection("catalog");
+        return;
       }
-    );
 
-    navigationItems.forEach(({ id }) => {
-      const section = document.getElementById(id);
-      if (section) observer.observe(section);
-    });
+      const markerPosition = window.scrollY + 150;
+      const currentSection = navigationItems.reduce<SectionId>((current, { id }) => {
+        const section = document.getElementById(id);
+        return section && section.offsetTop <= markerPosition ? id : current;
+      }, "overview");
 
-    return () => observer.disconnect();
+      setActiveSection(currentSection);
+    };
+
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    updateActiveSection();
+
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      if (navigationTimerRef.current !== undefined) window.clearTimeout(navigationTimerRef.current);
+    };
   }, []);
+
+  const handleNavigation = (event: MouseEvent<HTMLAnchorElement>, id: SectionId) => {
+    event.preventDefault();
+    navigationLockRef.current = true;
+    setActiveSection(id);
+    window.history.replaceState(null, "", `#${id}`);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    if (navigationTimerRef.current !== undefined) window.clearTimeout(navigationTimerRef.current);
+    navigationTimerRef.current = window.setTimeout(() => {
+      navigationLockRef.current = false;
+      setActiveSection(id);
+    }, 900);
+  };
 
   return (
     <div className="app-shell">
@@ -91,7 +110,7 @@ export function App() {
               className={activeSection === id ? "is-active" : undefined}
               href={`#${id}`}
               key={id}
-              onClick={() => setActiveSection(id)}
+              onClick={(event) => handleNavigation(event, id)}
             >
               {label}
             </a>
