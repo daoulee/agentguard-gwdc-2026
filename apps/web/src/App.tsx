@@ -1,18 +1,27 @@
 import {
   mockProducts,
+  type AiStatusResponse,
   type AuditEvent,
   type DecisionReason,
+  type PolicyDraft,
   type PurchaseEvaluation,
   type SpendingPolicy
 } from "@agentguard/shared";
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const navigationItems = [
-  { id: "overview", label: "Overview" },
-  { id: "simulator", label: "Simulator" },
-  { id: "approvals", label: "Approvals" },
-  { id: "audit", label: "Audit log" }
+  { id: "overview", label: "개요" },
+  { id: "policy", label: "정책 만들기" },
+  { id: "simulator", label: "시뮬레이터" },
+  { id: "approvals", label: "승인함" },
+  { id: "audit", label: "감사 로그" }
 ] as const;
+
+const policyTemplates = [
+  "승인된 판매자에서 10만원 이하 키보드를 구매하고, 9만원이 넘으면 내 승인을 받아. 오늘까지.",
+  "KeyboardLab에서 오늘 안에 8만 5천원 이하 키보드만 자동 구매해.",
+  "TechStore에서 내일까지 12만원 이하 키보드를 구매하고, 7만원이 넘으면 확인을 받아."
+];
 
 type SectionId = (typeof navigationItems)[number]["id"];
 
@@ -32,7 +41,7 @@ const reasonLabels: Record<DecisionReason, string> = {
 };
 
 const eventLabels: Record<AuditEvent["type"], string> = {
-  policy_created: "정책 생성",
+  policy_created: "정책 적용",
   request_received: "구매 요청 수신",
   allowed: "자동 승인",
   blocked: "정책 차단",
@@ -75,16 +84,35 @@ const formatTime = (iso: string) => new Intl.DateTimeFormat("ko-KR", {
   minute: "2-digit",
   second: "2-digit"
 }).format(new Date(iso));
+const formatDeadline = (iso: string) => new Intl.DateTimeFormat("ko-KR", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit"
+}).format(new Date(iso));
+const toLocalDateTimeValue = (iso: string) => {
+  const date = new Date(iso);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+};
 
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
   const [policy, setPolicy] = useState<SpendingPolicy | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null);
+  const [policyPrompt, setPolicyPrompt] = useState(policyTemplates[0] ?? "");
+  const [policyDraft, setPolicyDraft] = useState<PolicyDraft | null>(null);
+  const [policyNotice, setPolicyNotice] = useState("");
+  const [isInterpreting, setIsInterpreting] = useState(false);
+  const [isApplyingPolicy, setIsApplyingPolicy] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState(mockProducts[0]?.id ?? "");
   const [fee, setFee] = useState(0);
   const [evaluation, setEvaluation] = useState<PurchaseEvaluation | null>(null);
   const [approvals, setApprovals] = useState<PurchaseEvaluation[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [integrityValid, setIntegrityValid] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
+  const [isDemoRunning, setIsDemoRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const navigationLockRef = useRef(false);
   const navigationTimerRef = useRef<number | undefined>(undefined);
@@ -92,18 +120,22 @@ export function App() {
   const refreshActivity = useCallback(async () => {
     const [approvalPayload, auditPayload] = await Promise.all([
       requestJson<{ approvals: PurchaseEvaluation[] }>("/api/approvals"),
-      requestJson<{ events: AuditEvent[] }>("/api/audit")
+      requestJson<{ events: AuditEvent[]; integrityValid: boolean }>("/api/audit")
     ]);
     setApprovals(approvalPayload.approvals);
     setAuditEvents(auditPayload.events);
+    setIntegrityValid(auditPayload.integrityValid);
   }, []);
 
   useEffect(() => {
     Promise.all([
       requestJson<{ policy: SpendingPolicy }>("/api/policy"),
+      requestJson<AiStatusResponse>("/api/ai/status"),
       refreshActivity()
-    ]).then(([policyPayload]) => {
+    ]).then(([policyPayload, statusPayload]) => {
       setPolicy(policyPayload.policy);
+      setAiStatus(statusPayload);
+      setPolicyPrompt(policyPayload.policy.sourceText);
     }).catch((error: unknown) => {
       setErrorMessage(error instanceof Error ? error.message : "서버에 연결할 수 없습니다.");
     });
@@ -124,7 +156,6 @@ export function App() {
       }, "overview");
       setActiveSection(currentSection);
     };
-
     window.addEventListener("scroll", updateActiveSection, { passive: true });
     updateActiveSection();
     return () => {
@@ -146,21 +177,98 @@ export function App() {
     }, 900);
   };
 
+  const interpretPrompt = async () => {
+    setIsInterpreting(true);
+    setErrorMessage("");
+    setPolicyNotice("");
+    try {
+      const payload = await requestJson<{ draft: PolicyDraft }>("/api/policies/interpret", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: policyPrompt })
+      });
+      setPolicyDraft(payload.draft);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "정책 해석에 실패했습니다.");
+    } finally {
+      setIsInterpreting(false);
+    }
+  };
+
+  const updateDraft = <Key extends keyof PolicyDraft>(key: Key, value: PolicyDraft[Key]) => {
+    setPolicyDraft((current) => current ? { ...current, [key]: value } : current);
+    setPolicyNotice("");
+  };
+
+  const toggleMerchant = (merchant: string) => {
+    if (!policyDraft) return;
+    const selected = policyDraft.allowedMerchants.includes(merchant);
+    updateDraft(
+      "allowedMerchants",
+      selected
+        ? policyDraft.allowedMerchants.filter((item) => item !== merchant)
+        : [...policyDraft.allowedMerchants, merchant]
+    );
+  };
+
+  const applyPolicy = async () => {
+    if (!policyDraft) return;
+    setIsApplyingPolicy(true);
+    setErrorMessage("");
+    try {
+      const payload = await requestJson<{ policy: SpendingPolicy }>("/api/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(policyDraft)
+      });
+      setPolicy(payload.policy);
+      setEvaluation(null);
+      setPolicyNotice(`정책 v${payload.policy.version}이 현재 지출 방화벽에 적용됐습니다.`);
+      await refreshActivity();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "정책 적용에 실패했습니다.");
+    } finally {
+      setIsApplyingPolicy(false);
+    }
+  };
+
+  const evaluateProduct = async (productId: string, requestFee: number) => requestJson<{ evaluation: PurchaseEvaluation }>("/api/evaluate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ productId, fee: requestFee })
+  });
+
   const runEvaluation = async () => {
     setIsRunning(true);
     setErrorMessage("");
     try {
-      const payload = await requestJson<{ evaluation: PurchaseEvaluation }>("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: selectedProductId, fee })
-      });
+      const payload = await evaluateProduct(selectedProductId, fee);
       setEvaluation(payload.evaluation);
       await refreshActivity();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "정책 검사에 실패했습니다.");
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const runDemoSequence = async () => {
+    setIsDemoRunning(true);
+    setErrorMessage("");
+    try {
+      await requestJson("/api/reset", { method: "POST" });
+      let lastEvaluation: PurchaseEvaluation | null = null;
+      for (const product of mockProducts) {
+        const payload = await evaluateProduct(product.id, 0);
+        lastEvaluation = payload.evaluation;
+      }
+      setEvaluation(lastEvaluation);
+      setSelectedProductId(mockProducts[2]?.id ?? selectedProductId);
+      await refreshActivity();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "데모 시나리오 실행에 실패했습니다.");
+    } finally {
+      setIsDemoRunning(false);
     }
   };
 
@@ -179,15 +287,20 @@ export function App() {
   };
 
   const resetDemo = async () => {
-    await requestJson("/api/reset", { method: "POST" });
-    setEvaluation(null);
-    await refreshActivity();
+    try {
+      await requestJson("/api/reset", { method: "POST" });
+      setEvaluation(null);
+      await refreshActivity();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "기록 초기화에 실패했습니다.");
+    }
   };
 
   const selectedProduct = useMemo(
     () => mockProducts.find((product) => product.id === selectedProductId) ?? mockProducts[0],
     [selectedProductId]
   );
+  const merchantOptions = useMemo(() => [...new Set(mockProducts.map((product) => product.merchant))], []);
   const decision = evaluation ? decisionCopy[evaluation.decision.status] : null;
   const allowedCount = auditEvents.filter((event) => event.type === "allowed" || event.type === "approved").length;
   const blockedCount = auditEvents.filter((event) => event.type === "blocked" || event.type === "rejected").length;
@@ -195,53 +308,44 @@ export function App() {
   return (
     <div className="app-shell">
       <nav className="topbar" aria-label="주요 메뉴">
-        <a className="brand" href="#overview" aria-label="AgentGuard 홈">
-          <span className="brand-mark"><ShieldMark /></span><span>AgentGuard</span>
-        </a>
+        <a className="brand" href="#overview" aria-label="AgentGuard 홈"><span className="brand-mark"><ShieldMark /></span><span>AgentGuard</span></a>
         <div className="nav-links">
           {navigationItems.map(({ id, label }) => (
-            <a
-              aria-current={activeSection === id ? "page" : undefined}
-              className={activeSection === id ? "is-active" : undefined}
-              href={`#${id}`}
-              key={id}
-              onClick={(event) => handleNavigation(event, id)}
-            >{label}</a>
+            <a aria-current={activeSection === id ? "page" : undefined} className={activeSection === id ? "is-active" : undefined} href={`#${id}`} key={id} onClick={(event) => handleNavigation(event, id)}>
+              {label}{id === "approvals" && approvals.length > 0 && <b className="nav-count">{approvals.length}</b>}
+            </a>
           ))}
         </div>
         <div className="network-status"><span /> Policy engine live</div>
       </nav>
 
-      {errorMessage && <div className="error-banner" role="alert">{errorMessage}</div>}
+      {errorMessage && <div className="error-banner" role="alert"><span>!</span>{errorMessage}<button onClick={() => setErrorMessage("")} type="button">닫기</button></div>}
 
       <main>
         <section className="hero" id="overview">
           <div className="hero-copy-block">
             <div className="challenge-badge"><span>GWDC 2026</span>FuriosaAI Challenge B</div>
             <h1>AI 지출은,<br /><span>승인된 범위 안에서만.</span></h1>
-            <p className="hero-copy">AgentGuard는 AI 에이전트의 결제 요청을 정책으로 검증하고,<br />승인과 차단의 모든 근거를 감사 가능한 기록으로 남깁니다.</p>
+            <p className="hero-copy">자연어로 권한을 정하면 AgentGuard가 결제 전에 정책을 검사하고,<br />승인과 차단의 모든 근거를 검증 가능한 기록으로 남깁니다.</p>
             <div className="hero-actions">
-              <a className="button button-primary" href="#simulator">거래 시뮬레이션 <ArrowIcon /></a>
-              <a className="button button-secondary" href="#audit">감사 기록 보기</a>
+              <a className="button button-primary" href="#policy">내 정책 만들기 <ArrowIcon /></a>
+              <a className="button button-secondary" href="#simulator">거래 시뮬레이션</a>
             </div>
           </div>
 
           <div className="policy-preview" aria-label="활성 지출 정책 미리보기">
             <div className="preview-header">
-              <div><p className="micro-label">ACTIVE POLICY</p><h2>{policy?.name ?? "정책 불러오는 중"}</h2></div>
+              <div><p className="micro-label">ACTIVE POLICY · V{policy?.version ?? 1}</p><h2>{policy?.name ?? "정책 불러오는 중"}</h2></div>
               <span className="live-badge"><i /> 적용 중</span>
             </div>
-            <div className="policy-statement">“승인된 판매자에서 10만원 이하 키보드를 오늘 안에 구매해.”</div>
+            <div className="policy-statement">“{policy?.sourceText ?? "정책을 불러오고 있습니다."}”</div>
             <dl className="policy-grid">
               <div><dt>최대 예산</dt><dd>{policy ? formatKrw(policy.budget) : "-"}</dd></div>
               <div><dt>자동 승인</dt><dd>{policy ? `${formatKrw(policy.autoApprovalLimit)} 이하` : "-"}</dd></div>
               <div><dt>허용 판매자</dt><dd>{policy?.allowedMerchants.length ?? 0}곳</dd></div>
-              <div><dt>초과 처리</dt><dd>사용자 확인</dd></div>
+              <div><dt>유효 기한</dt><dd>{policy ? formatDeadline(policy.deadline) : "-"}</dd></div>
             </dl>
-            <div className="policy-footer">
-              <div className="avatar-stack" aria-hidden="true"><span>U</span><span>AI</span><span>✓</span></div>
-              <p>사용자 정책 → AI 요청 → 결정론적 검증</p>
-            </div>
+            <div className="policy-footer"><div className="avatar-stack" aria-hidden="true"><span>U</span><span>AI</span><span>✓</span></div><p>자연어 해석 → 사용자 확인 → 결정론적 검증</p></div>
           </div>
         </section>
 
@@ -251,10 +355,59 @@ export function App() {
           <article><span className="metric-dot metric-dot-violet" /><div><strong>{blockedCount}</strong><p>차단·거절</p></div></article>
         </section>
 
-        <section className="section" id="simulator">
+        <section className="section" id="policy">
           <div className="section-heading">
+            <div><p className="micro-label">NATURAL LANGUAGE POLICY</p><h2>말로 정하고, 눈으로 확인하세요</h2></div>
+            <p>AI는 문장을 정책 초안으로 바꿀 뿐입니다. 사용자가 확인하고 적용하기 전에는 어떤 지출 권한도 바뀌지 않습니다.</p>
+          </div>
+
+          <div className="policy-builder">
+            <div className="policy-input-pane">
+              <div className="builder-step"><span>01</span><div><strong>지출 조건 작성</strong><p>금액, 판매자, 품목, 승인 기준과 기한을 포함하면 더 정확합니다.</p></div></div>
+              <textarea aria-label="자연어 지출 정책" maxLength={1000} onChange={(event) => { setPolicyPrompt(event.target.value); setPolicyDraft(null); setPolicyNotice(""); }} value={policyPrompt} />
+              <div className="prompt-footer"><span>{policyPrompt.length} / 1,000</span><span className={aiStatus?.configured ? "provider-chip is-ai" : "provider-chip"}>{aiStatus?.provider ?? "연결 확인 중"}</span></div>
+              <div className="template-list">
+                <p>예시로 시작하기</p>
+                {policyTemplates.map((template, index) => <button key={template} onClick={() => { setPolicyPrompt(template); setPolicyDraft(null); setPolicyNotice(""); }} type="button">예시 {index + 1}</button>)}
+              </div>
+              <button className="button button-primary interpret-button" disabled={isInterpreting || policyPrompt.trim().length < 10} onClick={interpretPrompt} type="button">
+                {isInterpreting ? <><span className="spinner" />정책 해석 중…</> : <>정책 초안 만들기 <ArrowIcon /></>}
+              </button>
+            </div>
+
+            <div className="policy-review-pane">
+              <div className="builder-step"><span>02</span><div><strong>해석 결과 확인</strong><p>숫자와 허용 범위를 직접 고친 뒤 최종 적용하세요.</p></div></div>
+              {!policyDraft ? (
+                <div className="review-empty"><span className="empty-shield"><ShieldMark /></span><strong>아직 정책 초안이 없습니다</strong><p>왼쪽 문장을 해석하면 구조화된 규칙이 여기에 표시됩니다.</p></div>
+              ) : (
+                <div className="draft-form">
+                  <div className="draft-heading">
+                    <span className={`provider-chip ${policyDraft.provider === "kiln" ? "is-ai" : ""}`}>{policyDraft.provider === "kiln" ? "Kiln · Qwen 해석" : "안전 규칙 변환"}</span>
+                    <span>적용 전 초안</span>
+                  </div>
+                  <label className="field full-field"><span>정책 이름</span><input onChange={(event) => updateDraft("name", event.target.value)} value={policyDraft.name} /></label>
+                  <div className="field-grid">
+                    <label className="field"><span>최대 예산</span><div className="unit-input"><input min="1" onChange={(event) => updateDraft("budget", Number(event.target.value))} type="number" value={policyDraft.budget} /><b>원</b></div></label>
+                    <label className="field"><span>자동 승인 한도</span><div className="unit-input"><input min="0" onChange={(event) => updateDraft("autoApprovalLimit", Number(event.target.value))} type="number" value={policyDraft.autoApprovalLimit} /><b>원</b></div></label>
+                  </div>
+                  <fieldset className="merchant-field"><legend>허용 판매자</legend><div>{merchantOptions.map((merchant) => <label key={merchant} className={policyDraft.allowedMerchants.includes(merchant) ? "merchant-check is-checked" : "merchant-check"}><input checked={policyDraft.allowedMerchants.includes(merchant)} onChange={() => toggleMerchant(merchant)} type="checkbox" /><span>{merchant}{merchant === "UnlistedMarket" ? " · 미등록" : ""}</span></label>)}</div></fieldset>
+                  <div className="field-grid">
+                    <label className="field"><span>허용 카테고리</span><input onChange={(event) => updateDraft("allowedCategories", event.target.value.split(",").map((value) => value.trim()).filter(Boolean))} value={policyDraft.allowedCategories.join(", ")} /></label>
+                    <label className="field"><span>유효 기한</span><input onChange={(event) => updateDraft("deadline", new Date(event.target.value).toISOString())} type="datetime-local" value={toLocalDateTimeValue(policyDraft.deadline)} /></label>
+                  </div>
+                  {policyDraft.warnings.length > 0 && <div className="warning-list">{policyDraft.warnings.map((warning) => <p key={warning}><span>!</span>{warning}</p>)}</div>}
+                  {policyNotice && <div className="success-notice">✓ {policyNotice}</div>}
+                  <button className="button apply-policy-button" disabled={isApplyingPolicy || policyDraft.allowedMerchants.length === 0} onClick={applyPolicy} type="button">{isApplyingPolicy ? "정책 적용 중…" : "검토한 정책 적용"}</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="section" id="simulator">
+          <div className="section-heading simulator-heading">
             <div><p className="micro-label">LIVE POLICY SIMULATOR</p><h2>AI 구매 요청을 실행해보세요</h2></div>
-            <p>상품 하나를 고르면 서버의 정책 엔진이 예산, 판매자, 카테고리, 승인 한도를 순서대로 검사합니다.</p>
+            <div className="heading-actions"><p>상품 하나를 고르면 현재 정책을 기준으로 판정합니다.</p><button disabled={isDemoRunning} onClick={runDemoSequence} type="button">{isDemoRunning ? "데모 실행 중…" : "핵심 3건 자동 실행"}</button></div>
           </div>
 
           <div className="simulator-layout">
@@ -262,51 +415,25 @@ export function App() {
               <div className="control-heading"><span>01</span><div><strong>구매 대상 선택</strong><p>각 상품은 서로 다른 정책 결과를 보여줍니다.</p></div></div>
               <div className="product-options">
                 {mockProducts.map((product) => (
-                  <button
-                    className={selectedProductId === product.id ? "product-option is-selected" : "product-option"}
-                    key={product.id}
-                    onClick={() => { setSelectedProductId(product.id); setEvaluation(null); }}
-                    type="button"
-                  >
-                    <span className="option-radio" />
-                    <span><strong>{product.name}</strong><small>{product.merchant} · {product.category}</small></span>
-                    <b>{formatKrw(product.priceKrw)}</b>
+                  <button className={selectedProductId === product.id ? "product-option is-selected" : "product-option"} key={product.id} onClick={() => { setSelectedProductId(product.id); setEvaluation(null); }} type="button">
+                    <span className="option-radio" /><span><strong>{product.name}</strong><small>{product.merchant} · {product.category}</small></span><b>{formatKrw(product.priceKrw)}</b>
                   </button>
                 ))}
               </div>
-
-              <label className="fee-field">
-                <span><strong>추가 수수료</strong><small>예산 초과 상황도 시험할 수 있습니다.</small></span>
-                <span className="fee-input"><input min="0" onChange={(event) => setFee(Math.max(0, Number(event.target.value)))} type="number" value={fee} />원</span>
-              </label>
-
-              <button className="button button-primary run-button" disabled={isRunning || !selectedProduct} onClick={runEvaluation} type="button">
-                {isRunning ? "정책 검사 중…" : "AI 구매 요청 실행"}<ArrowIcon />
-              </button>
+              <label className="fee-field"><span><strong>추가 수수료</strong><small>상품 가격과 합산해 예산을 검사합니다.</small></span><span className="fee-input"><input min="0" onChange={(event) => setFee(Math.max(0, Number(event.target.value)))} type="number" value={fee} />원</span></label>
+              <button className="button button-primary run-button" disabled={isRunning || !selectedProduct} onClick={runEvaluation} type="button">{isRunning ? "정책 검사 중…" : "AI 구매 요청 실행"}<ArrowIcon /></button>
             </div>
 
             <div className={`decision-panel ${evaluation ? `decision-${evaluation.decision.status}` : ""}`}>
               {!evaluation ? (
-                <div className="decision-empty">
-                  <span className="empty-shield"><ShieldMark /></span>
-                  <p className="micro-label">WAITING FOR REQUEST</p>
-                  <h3>아직 검사한 거래가 없습니다</h3>
-                  <p>왼쪽에서 상품을 선택하고 구매 요청을 실행하세요.</p>
-                </div>
+                <div className="decision-empty"><span className="empty-shield"><ShieldMark /></span><p className="micro-label">WAITING FOR REQUEST</p><h3>아직 검사한 거래가 없습니다</h3><p>왼쪽에서 상품을 선택하고 구매 요청을 실행하세요.</p></div>
               ) : (
                 <div className="decision-content">
-                  <div className="decision-status"><span>{evaluation.decision.status === "allow" ? "✓" : evaluation.decision.status === "block" ? "×" : "!"}</span><p>POLICY DECISION</p></div>
-                  <h3>{decision?.label}</h3>
-                  <p className="decision-caption">{decision?.caption}</p>
+                  <div className="decision-status"><span>{evaluation.decision.status === "allow" ? "✓" : evaluation.decision.status === "block" ? "×" : "!"}</span><p>POLICY DECISION · V{policy?.version}</p></div>
+                  <h3>{decision?.label}</h3><p className="decision-caption">{decision?.caption}</p>
                   <div className="decision-total"><span>검사 총액</span><strong>{formatKrw(evaluation.decision.totalAmount)}</strong></div>
-                  <ul className="reason-list">
-                    {evaluation.decision.reasons.map((reason) => <li key={reason}><span />{reasonLabels[reason]}</li>)}
-                  </ul>
-                  <div className="check-flow">
-                    <span className="is-done">요청 수신</span><i />
-                    <span className="is-done">정책 검사</span><i />
-                    <span className="is-done">결정 기록</span>
-                  </div>
+                  <ul className="reason-list">{evaluation.decision.reasons.map((reason) => <li key={reason}><span />{reasonLabels[reason]}</li>)}</ul>
+                  <div className="check-flow"><span className="is-done">요청 수신</span><i /><span className="is-done">정책 검사</span><i /><span className="is-done">해시 기록</span></div>
                 </div>
               )}
             </div>
@@ -314,54 +441,17 @@ export function App() {
         </section>
 
         <section className="section approval-section" id="approvals">
-          <div className="section-heading compact-heading">
-            <div><p className="micro-label">HUMAN IN THE LOOP</p><h2>승인 대기함</h2></div>
-            <span className="dataset-count">{approvals.length} pending</span>
-          </div>
-          {approvals.length === 0 ? (
-            <div className="empty-state"><span>✓</span><div><strong>대기 중인 요청이 없습니다</strong><p>9만원을 초과하고 10만원 이하인 거래를 실행하면 여기에 표시됩니다.</p></div></div>
-          ) : (
-            <div className="approval-list">
-              {approvals.map((item) => (
-                <article className="approval-card" key={item.request.id}>
-                  <div><p className="approval-kicker">APPROVAL REQUIRED</p><h3>{item.product.name}</h3><p>{item.product.merchant} · 요청 {formatTime(item.request.requestedAt)}</p></div>
-                  <strong className="approval-price">{formatKrw(item.decision.totalAmount)}</strong>
-                  <div className="approval-actions">
-                    <button className="button reject-button" onClick={() => resolveApproval(item.request.id, "reject")} type="button">거절</button>
-                    <button className="button approve-button" onClick={() => resolveApproval(item.request.id, "approve")} type="button">승인</button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          <div className="section-heading compact-heading"><div><p className="micro-label">HUMAN IN THE LOOP</p><h2>승인 대기함</h2></div><span className="dataset-count">{approvals.length} pending</span></div>
+          {approvals.length === 0 ? <div className="empty-state"><span>✓</span><div><strong>대기 중인 요청이 없습니다</strong><p>자동 승인 한도를 초과하고 최대 예산 이하인 거래가 여기에 표시됩니다.</p></div></div> : <div className="approval-list">{approvals.map((item) => <article className="approval-card" key={item.request.id}><div><p className="approval-kicker">APPROVAL REQUIRED</p><h3>{item.product.name}</h3><p>{item.product.merchant} · 요청 {formatTime(item.request.requestedAt)}</p></div><strong className="approval-price">{formatKrw(item.decision.totalAmount)}</strong><div className="approval-actions"><button className="button reject-button" onClick={() => resolveApproval(item.request.id, "reject")} type="button">거절</button><button className="button approve-button" onClick={() => resolveApproval(item.request.id, "approve")} type="button">승인</button></div></article>)}</div>}
         </section>
 
         <section className="section audit-section" id="audit">
-          <div className="section-heading compact-heading">
-            <div><p className="micro-label">AUDITABLE BY DESIGN</p><h2>감사 로그</h2></div>
-            <button className="text-button" onClick={resetDemo} type="button">기록 초기화</button>
-          </div>
-          {auditEvents.length === 0 ? (
-            <div className="empty-state"><span>⌁</span><div><strong>기록된 이벤트가 없습니다</strong><p>첫 구매 요청부터 모든 판단 근거가 시간순으로 남습니다.</p></div></div>
-          ) : (
-            <div className="audit-table" role="table" aria-label="정책 감사 로그">
-              {auditEvents.map((event) => (
-                <div className="audit-row" role="row" key={event.id}>
-                  <span className={`event-dot event-${event.type}`} />
-                  <div><strong>{eventLabels[event.type]}</strong><span>{String(event.details.product ?? event.requestId.split("-").slice(-2).join("-"))}</span></div>
-                  <code>{event.requestId.slice(-10)}</code>
-                  <time dateTime={event.occurredAt}>{formatTime(event.occurredAt)}</time>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="section-heading compact-heading"><div><p className="micro-label">TAMPER-EVIDENT AUDIT TRAIL</p><h2>감사 로그</h2></div><div className="audit-actions"><span className={integrityValid ? "integrity-badge" : "integrity-badge is-invalid"}>{integrityValid ? "✓ 해시 체인 정상" : "! 기록 검증 실패"}</span><button className="text-button" onClick={resetDemo} type="button">기록 초기화</button></div></div>
+          {auditEvents.length === 0 ? <div className="empty-state"><span>⌁</span><div><strong>기록된 이벤트가 없습니다</strong><p>첫 구매 요청부터 모든 판단 근거가 해시로 연결되어 저장됩니다.</p></div></div> : <div className="audit-table" role="table" aria-label="정책 감사 로그">{auditEvents.map((event) => <div className="audit-row" role="row" key={event.id}><span className={`event-dot event-${event.type}`} /><div><strong>{eventLabels[event.type]}</strong><span>{String(event.details.product ?? event.details.name ?? event.requestId.split("-").slice(-2).join("-"))}</span></div><code title={event.hash}>#{event.hash.slice(0, 8)}</code><time dateTime={event.occurredAt}>{formatTime(event.occurredAt)}</time></div>)}</div>}
         </section>
       </main>
 
-      <footer>
-        <div className="brand footer-brand"><span className="brand-mark"><ShieldMark /></span><span>AgentGuard</span></div>
-        <p>Built for accountable AI spending · GWDC 2026</p>
-      </footer>
+      <footer><div className="brand footer-brand"><span className="brand-mark"><ShieldMark /></span><span>AgentGuard</span></div><p>Built for accountable AI spending · GWDC 2026</p></footer>
     </div>
   );
 }

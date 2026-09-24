@@ -7,3 +7,5 @@ dist/
 coverage/
 *.log
 *.tsbuildinfo
+apps/server/data/*.json
+!apps/server/data/.gitkeep

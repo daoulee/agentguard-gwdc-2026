@@ -1,4 +1,19 @@
 export type Currency = "KRW" | "USDT";
+export type PolicyInterpretationProvider = "kiln" | "safe_fallback";
+
+export type PolicyDraft = {
+  name: string;
+  sourceText: string;
+  budget: number;
+  autoApprovalLimit: number;
+  currency: Currency;
+  allowedMerchants: string[];
+  allowedCategories: string[];
+  deadline: string;
+  requireHumanApproval: boolean;
+  provider: PolicyInterpretationProvider;
+  warnings: string[];
+};
 
 export type SpendingPolicy = {
   id: string;
@@ -10,6 +25,10 @@ export type SpendingPolicy = {
   allowedCategories: string[];
   deadline: string;
   requireHumanApproval: boolean;
+  sourceText: string;
+  interpretationProvider: PolicyInterpretationProvider;
+  version: number;
+  updatedAt: string;
 };
 
 export type Product = {
@@ -60,6 +79,8 @@ export type AuditEvent = {
     | "submitted";
   occurredAt: string;
   details: Record<string, unknown>;
+  previousHash: string;
+  hash: string;
   transactionHash?: string;
 };
 
@@ -73,6 +94,12 @@ export type HealthResponse = {
   service: "agentguard-server";
   status: "ok";
   timestamp: string;
+};
+
+export type AiStatusResponse = {
+  provider: "Kiln · Qwen3-32B" | "Safe fallback parser";
+  configured: boolean;
+  model: string;
 };
 
 export const mockProducts: Product[] = [
