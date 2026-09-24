@@ -1,4 +1,5 @@
 import { mockProducts } from "@agentguard/shared";
+import { useEffect, useState } from "react";
 
 type Scenario = {
   label: string;
@@ -13,6 +14,14 @@ const scenarios: Scenario[] = [
   { label: "예산 초과", title: "Creator Pro Keyboard", detail: "상품 98,000원 + 수수료 5,000원", amount: "103,000원", status: "blocked" },
   { label: "판매자 위반", title: "Unknown Deal Keyboard", detail: "UnlistedMarket · 미등록 판매자", amount: "65,000원", status: "blocked" }
 ];
+
+const navigationItems = [
+  { id: "overview", label: "Overview" },
+  { id: "scenarios", label: "Scenarios" },
+  { id: "catalog", label: "Catalog" }
+] as const;
+
+type SectionId = (typeof navigationItems)[number]["id"];
 
 function ShieldMark() {
   return (
@@ -40,6 +49,33 @@ function DecisionIcon({ status }: Pick<Scenario, "status">) {
 }
 
 export function App() {
+  const [activeSection, setActiveSection] = useState<SectionId>("overview");
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
+
+        if (visibleEntry) {
+          setActiveSection(visibleEntry.target.id as SectionId);
+        }
+      },
+      {
+        rootMargin: "-18% 0px -62% 0px",
+        threshold: [0, 0.25, 0.5, 0.75]
+      }
+    );
+
+    navigationItems.forEach(({ id }) => {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="app-shell">
       <nav className="topbar" aria-label="주요 메뉴">
@@ -49,9 +85,17 @@ export function App() {
         </a>
 
         <div className="nav-links">
-          <a className="is-active" href="#overview">Overview</a>
-          <a href="#scenarios">Scenarios</a>
-          <a href="#catalog">Catalog</a>
+          {navigationItems.map(({ id, label }) => (
+            <a
+              aria-current={activeSection === id ? "page" : undefined}
+              className={activeSection === id ? "is-active" : undefined}
+              href={`#${id}`}
+              key={id}
+              onClick={() => setActiveSection(id)}
+            >
+              {label}
+            </a>
+          ))}
         </div>
 
         <div className="network-status"><span /> Testnet ready</div>
@@ -149,4 +193,3 @@ export function App() {
     </div>
   );
 }
-
