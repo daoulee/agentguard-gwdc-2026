@@ -16,6 +16,13 @@ packages/policy   정책 엔진 인터페이스
 docs              기획 및 운영 문서
 ```
 
+## 코드 이해하기
+
+비전공자도 프로젝트 구조와 각 코드 문단의 역할을 이해할 수 있도록 쇼핑몰·경비실 비유로 정리한 문서입니다.
+
+- [비전공자용 코드 안내서](docs/CODE_GUIDE_FOR_BEGINNERS.md)
+- [팀 작업 규칙](docs/TEAM_WORKFLOW.md)
+
 ## 시작하기
 
 ```bash
@@ -40,4 +47,3 @@ feature/policy-blockchain
 - 개인키, 시드 구문, API 키를 저장소에 커밋하지 않습니다.
 - 실제 자산 대신 공개 테스트넷만 사용합니다.
 - `.env.example`에는 변수 이름만 기록합니다.
-
