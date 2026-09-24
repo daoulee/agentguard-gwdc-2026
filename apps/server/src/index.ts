@@ -4,6 +4,7 @@ import express from "express";
 import { evaluatePurchase, validatePolicyDraft } from "@agentguard/policy";
 import {
   mockProducts,
+  merchantDirectory,
   type HealthResponse,
   type PolicyDraft,
   type PurchaseEvaluation,
@@ -31,7 +32,16 @@ const isPolicyDraftPayload = (value: unknown): value is PolicyDraft => {
     && typeof draft.deadline === "string"
     && typeof draft.requireHumanApproval === "boolean"
     && (draft.provider === "kiln" || draft.provider === "safe_fallback")
-    && Array.isArray(draft.warnings);
+    && Array.isArray(draft.warnings)
+    && draft.warnings.every((warning) => typeof warning === "string")
+    && Array.isArray(draft.missingFields)
+    && draft.missingFields.every((field) => (
+      ["budget", "autoApprovalLimit", "allowedMerchants", "allowedCategories", "deadline"].includes(String(field))
+    ))
+    && Array.isArray(draft.clarifyingQuestions)
+    && draft.clarifyingQuestions.every((question) => typeof question === "string")
+    && Boolean(draft.fieldSources)
+    && typeof draft.fieldSources === "object";
 };
 
 app.use(cors());
@@ -68,7 +78,10 @@ app.post("/api/policies/interpret", async (request, response) => {
   }
 
   try {
-    const trustedProducts = mockProducts.filter((product) => product.merchant !== "UnlistedMarket");
+    const trustedMerchants = new Set(
+      merchantDirectory.filter((merchant) => merchant.trusted).map((merchant) => merchant.name)
+    );
+    const trustedProducts = mockProducts.filter((product) => trustedMerchants.has(product.merchant));
     const draft = await interpretPolicy(prompt, trustedProducts);
     response.json({ draft });
   } catch {

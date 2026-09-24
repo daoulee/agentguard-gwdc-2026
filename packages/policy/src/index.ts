@@ -2,6 +2,7 @@ import type {
   PolicyDecision,
   PolicyDraft,
   PolicyInterpretationProvider,
+  Product,
   PurchaseRequest,
   SpendingPolicy
 } from "@agentguard/shared";
@@ -44,7 +45,7 @@ export const evaluatePurchase: PolicyEvaluator = (policy, request) => {
 };
 
 type FallbackOptions = {
-  availableMerchants: string[];
+  availableProducts: Product[];
   now?: Date;
   provider?: PolicyInterpretationProvider;
 };
@@ -85,11 +86,23 @@ const inferDeadline = (prompt: string, now: Date) => {
 
 const inferCategories = (prompt: string) => {
   const categories: string[] = [];
+  if (/게이밍\s*모니터|gaming\s*monitor/i.test(prompt)) categories.push("gaming_monitor");
+  else if (/모니터|monitor|display/i.test(prompt)) categories.push("monitor");
   if (/키보드|keyboard/i.test(prompt)) categories.push("keyboard");
   if (/소프트웨어|software|구독/i.test(prompt)) categories.push("software");
   if (/여행|항공|숙박|travel/i.test(prompt)) categories.push("travel");
   if (/사무용품|office/i.test(prompt)) categories.push("office");
-  return categories.length > 0 ? categories : ["keyboard"];
+  return categories.length > 0 ? categories : ["general"];
+};
+
+const categoryNames: Record<string, string> = {
+  keyboard: "키보드",
+  gaming_monitor: "게이밍 모니터",
+  monitor: "모니터",
+  software: "소프트웨어",
+  travel: "여행",
+  office: "사무용품",
+  general: "일반 구매"
 };
 
 export function createFallbackPolicyDraft(prompt: string, options: FallbackOptions): PolicyDraft {
@@ -98,22 +111,51 @@ export function createFallbackPolicyDraft(prompt: string, options: FallbackOptio
   const amounts = extractAmounts(normalized).sort((left, right) => right - left);
   const budget = amounts[0] ?? 100_000;
   const approvalCandidate = amounts.find((amount) => amount < budget);
-  const mentionsApproval = /승인|확인|허락/.test(normalized);
-  const autoApprovalLimit = mentionsApproval ? (approvalCandidate ?? Math.floor(budget * 0.9)) : budget;
-  const explicitlyNamedMerchants = options.availableMerchants.filter((merchant) =>
+  const approvalInstruction = normalized.replace(/승인된\s*판매자/g, "");
+  const mentionsApproval = /승인|확인|허락/.test(approvalInstruction);
+  const mentionsAutomatic = /자동(?:으로|\s*구매|\s*승인)?/.test(normalized);
+  const autoApprovalLimit = approvalCandidate ?? (mentionsAutomatic ? budget : 0);
+  const allMerchants = [...new Set(options.availableProducts.map((product) => product.merchant))];
+  const explicitlyNamedMerchants = allMerchants.filter((merchant) =>
     normalized.toLowerCase().includes(merchant.toLowerCase())
   );
+  const allowedCategories = inferCategories(normalized);
+  const categoryMerchants = [...new Set(options.availableProducts
+    .filter((product) => allowedCategories.includes(product.category))
+    .map((product) => product.merchant))];
   const allowedMerchants = explicitlyNamedMerchants.length > 0
     ? explicitlyNamedMerchants
-    : options.availableMerchants;
-  const allowedCategories = inferCategories(normalized);
-  const categoryName = allowedCategories[0] === "keyboard" ? "키보드" : "AI 지출";
+    : categoryMerchants;
+  const categoryName = categoryNames[allowedCategories[0] ?? "general"] ?? "AI 지출";
   const warnings: string[] = [];
+  const missingFields: PolicyDraft["missingFields"] = [];
+  const clarifyingQuestions: string[] = [];
+  const hasDeadline = /오늘|내일|\d+\s*일\s*(?:안|이내)/.test(normalized);
+  const hasApprovedMerchantIntent = /승인된 판매자|허용된 판매자|등록된 판매자/.test(normalized);
 
-  if (amounts.length === 0) warnings.push("금액을 찾지 못해 최대 예산을 100,000원으로 설정했습니다.");
-  if (explicitlyNamedMerchants.length === 0) warnings.push("판매자 이름이 없어 등록된 판매자 전체를 허용했습니다.");
-  if (!/오늘|내일|\d+\s*일\s*(?:안|이내)/.test(normalized)) {
-    warnings.push("기한이 없어 오늘 23:59까지로 설정했습니다.");
+  if (amounts.length === 0) {
+    missingFields.push("budget");
+    warnings.push("금액을 찾지 못해 임시 예산 100,000원을 표시했습니다.");
+    clarifyingQuestions.push("최대 구매 예산을 얼마로 설정할까요?");
+  }
+  if (!mentionsApproval && !mentionsAutomatic) {
+    missingFields.push("autoApprovalLimit");
+    warnings.push("자동 승인 기준을 추측하지 않고 모든 거래를 사용자 승인 대상으로 두었습니다.");
+    clarifyingQuestions.push("얼마까지 자동 승인하고, 그 이상은 직접 확인할까요?");
+  }
+  if (allowedCategories.includes("general")) {
+    missingFields.push("allowedCategories");
+    clarifyingQuestions.push("구매하려는 상품 종류를 알려주세요.");
+  }
+  if (explicitlyNamedMerchants.length === 0 && !hasApprovedMerchantIntent) {
+    missingFields.push("allowedMerchants");
+    warnings.push("판매자 조건이 없어 카탈로그의 등록 판매자를 임시 표시했습니다.");
+    clarifyingQuestions.push("등록된 판매자 전체를 허용할까요?");
+  }
+  if (!hasDeadline) {
+    missingFields.push("deadline");
+    warnings.push("구매 기한을 추측하지 않고 오늘 23:59를 임시 표시했습니다.");
+    clarifyingQuestions.push("이 정책은 언제까지 유효해야 하나요?");
   }
 
   return {
@@ -125,13 +167,23 @@ export function createFallbackPolicyDraft(prompt: string, options: FallbackOptio
     allowedMerchants,
     allowedCategories,
     deadline: inferDeadline(normalized, now),
-    requireHumanApproval: mentionsApproval || autoApprovalLimit < budget,
+    requireHumanApproval: !mentionsAutomatic || mentionsApproval || autoApprovalLimit < budget,
     provider: options.provider ?? "safe_fallback",
-    warnings
+    warnings,
+    missingFields,
+    clarifyingQuestions,
+    fieldSources: {
+      name: "safe_default",
+      budget: amounts.length > 0 ? "user" : "needs_confirmation",
+      autoApprovalLimit: mentionsApproval || mentionsAutomatic ? "user" : "needs_confirmation",
+      allowedMerchants: explicitlyNamedMerchants.length > 0 ? "user" : hasApprovedMerchantIntent ? "catalog" : "needs_confirmation",
+      allowedCategories: allowedCategories.includes("general") ? "needs_confirmation" : "user",
+      deadline: hasDeadline ? "user" : "needs_confirmation"
+    }
   };
 }
 
-export function validatePolicyDraft(draft: PolicyDraft): string[] {
+export function validatePolicyDraft(draft: PolicyDraft, options: { allowIncomplete?: boolean } = {}): string[] {
   const errors: string[] = [];
   if (!draft.name.trim()) errors.push("정책 이름이 필요합니다.");
   if (!draft.sourceText.trim()) errors.push("정책 원문이 필요합니다.");
@@ -145,5 +197,6 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
   if (!Number.isFinite(new Date(draft.deadline).getTime())) errors.push("유효한 정책 기한이 필요합니다.");
   if (draft.currency !== "KRW") errors.push("현재 데모에서는 KRW 정책만 지원합니다.");
   if (draft.provider !== "kiln" && draft.provider !== "safe_fallback") errors.push("알 수 없는 정책 해석 방식입니다.");
+  if (!options.allowIncomplete && draft.missingFields.length > 0) errors.push("확인이 필요한 정책 항목을 모두 입력해주세요.");
   return errors;
 }

@@ -1,9 +1,13 @@
 import {
+  categoryLabels,
+  merchantDirectory,
   mockProducts,
   type AiStatusResponse,
   type AuditEvent,
   type DecisionReason,
   type PolicyDraft,
+  type PolicyFieldKey,
+  type PolicyMissingField,
   type PurchaseEvaluation,
   type SpendingPolicy
 } from "@agentguard/shared";
@@ -18,6 +22,7 @@ const navigationItems = [
 ] as const;
 
 const policyTemplates = [
+  "승인된 판매자에서 게이밍 모니터를 30만원 이내로 구매해.",
   "승인된 판매자에서 10만원 이하 키보드를 구매하고, 9만원이 넘으면 내 승인을 받아. 오늘까지.",
   "KeyboardLab에서 오늘 안에 8만 5천원 이하 키보드만 자동 구매해.",
   "TechStore에서 내일까지 12만원 이하 키보드를 구매하고, 7만원이 넘으면 확인을 받아."
@@ -49,6 +54,22 @@ const eventLabels: Record<AuditEvent["type"], string> = {
   approved: "사용자 승인",
   rejected: "사용자 거절",
   submitted: "거래 제출"
+};
+
+const sourceLabels = {
+  user: "사용자 입력",
+  catalog: "카탈로그 대조",
+  ai: "AI 해석",
+  safe_default: "안전 기본값",
+  needs_confirmation: "확인 필요"
+} as const;
+
+const missingFieldLabels: Record<PolicyMissingField, string> = {
+  budget: "최대 예산",
+  autoApprovalLimit: "자동 승인 한도",
+  allowedMerchants: "허용 판매자",
+  allowedCategories: "허용 카테고리",
+  deadline: "유효 기한"
 };
 
 function ShieldMark() {
@@ -92,6 +113,7 @@ const formatDeadline = (iso: string) => new Intl.DateTimeFormat("ko-KR", {
 }).format(new Date(iso));
 const toLocalDateTimeValue = (iso: string) => {
   const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 };
@@ -220,9 +242,39 @@ export function App() {
     }
   };
 
-  const updateDraft = <Key extends keyof PolicyDraft>(key: Key, value: PolicyDraft[Key]) => {
-    setPolicyDraft((current) => current ? { ...current, [key]: value } : current);
+  const resolveMissingField = (draft: PolicyDraft, field: PolicyMissingField) => {
+    const questionIndex = draft.missingFields.indexOf(field);
+    const warningKeyword: Partial<Record<PolicyMissingField, string>> = {
+      budget: "금액을 찾지 못해",
+      autoApprovalLimit: "자동 승인 기준을",
+      allowedMerchants: "판매자 조건이",
+      deadline: "구매 기한을"
+    };
+    return {
+      missingFields: draft.missingFields.filter((item) => item !== field),
+      clarifyingQuestions: questionIndex >= 0
+        ? draft.clarifyingQuestions.filter((_, index) => index !== questionIndex)
+        : draft.clarifyingQuestions,
+      warnings: warningKeyword[field]
+        ? draft.warnings.filter((warning) => !warning.includes(warningKeyword[field] ?? ""))
+        : draft.warnings,
+      fieldSources: { ...draft.fieldSources, [field]: "user" as const }
+    };
+  };
+
+  const updateDraft = <Key extends keyof PolicyDraft>(key: Key, value: PolicyDraft[Key], resolves?: PolicyMissingField) => {
+    setPolicyDraft((current) => current ? {
+      ...current,
+      [key]: value,
+      ...(resolves ? resolveMissingField(current, resolves) : {})
+    } : current);
     setPolicyNotice("");
+  };
+
+  const fieldSource = (field: PolicyFieldKey) => {
+    if (!policyDraft) return null;
+    const source = policyDraft.fieldSources[field];
+    return source ? <em className={`field-source source-${source}`}>{sourceLabels[source]}</em> : null;
   };
 
   const toggleMerchant = (merchant: string) => {
@@ -232,7 +284,8 @@ export function App() {
       "allowedMerchants",
       selected
         ? policyDraft.allowedMerchants.filter((item) => item !== merchant)
-        : [...policyDraft.allowedMerchants, merchant]
+        : [...policyDraft.allowedMerchants, merchant],
+      "allowedMerchants"
     );
   };
 
@@ -247,6 +300,8 @@ export function App() {
         body: JSON.stringify(policyDraft)
       });
       setPolicy(payload.policy);
+      const firstMatchingProduct = mockProducts.find((product) => payload.policy.allowedCategories.includes(product.category));
+      if (firstMatchingProduct) setSelectedProductId(firstMatchingProduct.id);
       setEvaluation(null);
       setPolicyNotice(`정책 v${payload.policy.version}이 현재 지출 방화벽에 적용됐습니다.`);
       await refreshActivity();
@@ -295,12 +350,12 @@ export function App() {
     try {
       await requestJson("/api/reset", { method: "POST" });
       let lastEvaluation: PurchaseEvaluation | null = null;
-      for (const product of mockProducts) {
+      for (const product of policyProducts) {
         const payload = await evaluateProduct(product.id, 0);
         lastEvaluation = payload.evaluation;
       }
       setEvaluation(lastEvaluation);
-      setSelectedProductId(mockProducts[2]?.id ?? selectedProductId);
+      setSelectedProductId(policyProducts.at(-1)?.id ?? selectedProductId);
       await refreshActivity();
       showToast("세 가지 판정을 완료했습니다. 승인 대기 건을 확인해주세요.", "neutral");
       moveToSection("approvals", 1_000);
@@ -341,11 +396,23 @@ export function App() {
     }
   };
 
+  const policyProducts = useMemo(() => {
+    const matches = policy
+      ? mockProducts.filter((product) => policy.allowedCategories.includes(product.category))
+      : [];
+    return matches.length > 0 ? matches : mockProducts.slice(0, 3);
+  }, [policy]);
   const selectedProduct = useMemo(
-    () => mockProducts.find((product) => product.id === selectedProductId) ?? mockProducts[0],
-    [selectedProductId]
+    () => policyProducts.find((product) => product.id === selectedProductId) ?? policyProducts[0],
+    [policyProducts, selectedProductId]
   );
-  const merchantOptions = useMemo(() => [...new Set(mockProducts.map((product) => product.merchant))], []);
+  const merchantOptions = useMemo(() => {
+    const categories = policyDraft?.allowedCategories ?? [];
+    const matches = merchantDirectory.filter((merchant) => (
+      categories.length === 0 || categories.some((category) => merchant.categories.includes(category))
+    ));
+    return matches.length > 0 ? matches : merchantDirectory;
+  }, [policyDraft?.allowedCategories]);
   const decision = evaluation ? decisionCopy[evaluation.decision.status] : null;
   const allowedCount = auditEvents.filter((event) => event.type === "allowed" || event.type === "approved").length;
   const blockedCount = auditEvents.filter((event) => event.type === "blocked" || event.type === "rejected").length;
@@ -431,19 +498,26 @@ export function App() {
                     <span className={`provider-chip ${policyDraft.provider === "kiln" ? "is-ai" : ""}`}>{policyDraft.provider === "kiln" ? "Kiln · Qwen 해석" : "안전 규칙 변환"}</span>
                     <span>적용 전 초안</span>
                   </div>
-                  <label className="field full-field"><span>정책 이름</span><input onChange={(event) => updateDraft("name", event.target.value)} value={policyDraft.name} /></label>
+                  {policyDraft.missingFields.length > 0 && (
+                    <div className="clarification-card" role="status">
+                      <div><span>?</span><strong>적용 전에 {policyDraft.missingFields.length}가지만 확인해주세요</strong></div>
+                      <ol>{policyDraft.clarifyingQuestions.map((question, index) => <li key={question}><b>{missingFieldLabels[policyDraft.missingFields[index] ?? "deadline"]}</b>{question}</li>)}</ol>
+                      <p>값을 직접 수정하면 확인 완료로 표시됩니다.</p>
+                    </div>
+                  )}
+                  <label className="field full-field"><span>정책 이름 {fieldSource("name")}</span><input onChange={(event) => updateDraft("name", event.target.value)} value={policyDraft.name} /></label>
                   <div className="field-grid">
-                    <label className="field"><span>최대 예산</span><div className="unit-input"><input min="1" onChange={(event) => updateDraft("budget", Number(event.target.value))} type="number" value={policyDraft.budget} /><b>원</b></div></label>
-                    <label className="field"><span>자동 승인 한도</span><div className="unit-input"><input min="0" onChange={(event) => updateDraft("autoApprovalLimit", Number(event.target.value))} type="number" value={policyDraft.autoApprovalLimit} /><b>원</b></div></label>
+                    <label className={`field ${policyDraft.missingFields.includes("budget") ? "needs-confirmation" : ""}`}><span>최대 예산 {fieldSource("budget")}</span><div className="unit-input"><input min="1" onChange={(event) => updateDraft("budget", Number(event.target.value), "budget")} type="number" value={policyDraft.budget} /><b>원</b></div></label>
+                    <label className={`field ${policyDraft.missingFields.includes("autoApprovalLimit") ? "needs-confirmation" : ""}`}><span>자동 승인 한도 {fieldSource("autoApprovalLimit")}</span><div className="unit-input"><input min="0" onChange={(event) => updateDraft("autoApprovalLimit", Number(event.target.value), "autoApprovalLimit")} type="number" value={policyDraft.autoApprovalLimit} /><b>원</b></div></label>
                   </div>
-                  <fieldset className="merchant-field"><legend>허용 판매자</legend><div>{merchantOptions.map((merchant) => <label key={merchant} className={policyDraft.allowedMerchants.includes(merchant) ? "merchant-check is-checked" : "merchant-check"}><input checked={policyDraft.allowedMerchants.includes(merchant)} onChange={() => toggleMerchant(merchant)} type="checkbox" /><span>{merchant}{merchant === "UnlistedMarket" ? " · 미등록" : ""}</span></label>)}</div></fieldset>
+                  <fieldset className={`merchant-field ${policyDraft.missingFields.includes("allowedMerchants") ? "needs-confirmation" : ""}`}><legend>허용 판매자 {fieldSource("allowedMerchants")}</legend><div>{merchantOptions.map((merchant) => <label key={merchant.name} className={policyDraft.allowedMerchants.includes(merchant.name) ? "merchant-check is-checked" : "merchant-check"}><input checked={policyDraft.allowedMerchants.includes(merchant.name)} onChange={() => toggleMerchant(merchant.name)} type="checkbox" /><span>{merchant.name}{merchant.trusted ? " · 검증됨" : " · 미등록"}</span></label>)}</div></fieldset>
                   <div className="field-grid">
-                    <label className="field"><span>허용 카테고리</span><input onChange={(event) => updateDraft("allowedCategories", event.target.value.split(",").map((value) => value.trim()).filter(Boolean))} value={policyDraft.allowedCategories.join(", ")} /></label>
-                    <label className="field"><span>유효 기한</span><input onChange={(event) => updateDraft("deadline", new Date(event.target.value).toISOString())} type="datetime-local" value={toLocalDateTimeValue(policyDraft.deadline)} /></label>
+                    <label className={`field ${policyDraft.missingFields.includes("allowedCategories") ? "needs-confirmation" : ""}`}><span>허용 카테고리 {fieldSource("allowedCategories")}</span><input onChange={(event) => updateDraft("allowedCategories", event.target.value.split(",").map((value) => value.trim()).filter(Boolean), "allowedCategories")} value={policyDraft.allowedCategories.join(", ")} /></label>
+                    <label className={`field ${policyDraft.missingFields.includes("deadline") ? "needs-confirmation" : ""}`}><span>유효 기한 {fieldSource("deadline")}</span><input onChange={(event) => updateDraft("deadline", event.target.value ? new Date(event.target.value).toISOString() : "", event.target.value ? "deadline" : undefined)} type="datetime-local" value={toLocalDateTimeValue(policyDraft.deadline)} /></label>
                   </div>
                   {policyDraft.warnings.length > 0 && <div className="warning-list">{policyDraft.warnings.map((warning) => <p key={warning}><span>!</span>{warning}</p>)}</div>}
                   {policyNotice && <div className="success-notice">✓ {policyNotice}</div>}
-                  <button className="button apply-policy-button" disabled={isApplyingPolicy || policyDraft.allowedMerchants.length === 0} onClick={applyPolicy} type="button">{isApplyingPolicy ? "정책 적용 중…" : "검토한 정책 적용"}</button>
+                  <button className="button apply-policy-button" disabled={isApplyingPolicy || policyDraft.allowedMerchants.length === 0 || policyDraft.missingFields.length > 0} onClick={applyPolicy} type="button">{isApplyingPolicy ? "정책 적용 중…" : policyDraft.missingFields.length > 0 ? `확인 필요 항목 ${policyDraft.missingFields.length}개` : "검토한 정책 적용"}</button>
                 </div>
               )}
             </div>
@@ -460,9 +534,9 @@ export function App() {
             <div className="simulator-controls">
               <div className="control-heading"><span>01</span><div><strong>구매 대상 선택</strong><p>각 상품은 서로 다른 정책 결과를 보여줍니다.</p></div></div>
               <div className="product-options">
-                {mockProducts.map((product) => (
+                {policyProducts.map((product) => (
                   <button className={selectedProductId === product.id ? "product-option is-selected" : "product-option"} key={product.id} onClick={() => { setSelectedProductId(product.id); setEvaluation(null); }} type="button">
-                    <span className="option-radio" /><span><strong>{product.name}</strong><small>{product.merchant} · {product.category}</small></span><b>{formatKrw(product.priceKrw)}</b>
+                    <span className="option-radio" /><span><strong>{product.name}</strong><small>{product.merchant} · {categoryLabels[product.category] ?? product.category}</small></span><b>{formatKrw(product.priceKrw)}</b>
                   </button>
                 ))}
               </div>

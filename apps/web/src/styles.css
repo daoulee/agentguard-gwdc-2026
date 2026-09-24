@@ -166,15 +166,27 @@ footer p { margin-bottom: 0; color: #8b948f; font-size: 0.72rem; }
 .draft-form { display: grid; gap: 17px; animation: content-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes content-rise { from { opacity: 0; transform: translate3d(0, 12px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
 .draft-heading { display: flex; align-items: center; justify-content: space-between; color: #929a96; font-size: 0.65rem; font-weight: 750; }
+.clarification-card { display: grid; gap: 10px; padding: 14px; border: 1px solid #d6c6f2; border-radius: 14px; color: #4d3b70; background: linear-gradient(135deg, #fbf8ff, #f5f1ff); box-shadow: 0 8px 24px rgba(87, 58, 130, 0.07); }
+.clarification-card > div { display: flex; align-items: center; gap: 8px; }
+.clarification-card > div > span { display: grid; width: 23px; height: 23px; place-items: center; border-radius: 50%; color: #fff; background: #7955ae; font-size: 0.75rem; font-weight: 900; }
+.clarification-card strong { font-size: 0.76rem; }
+.clarification-card ol { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.clarification-card li { display: grid; grid-template-columns: minmax(76px, auto) 1fr; gap: 8px; align-items: baseline; font-size: 0.69rem; line-height: 1.45; }
+.clarification-card li b { color: #71549b; font-size: 0.62rem; }
+.clarification-card > p { margin: 0; color: #87779e; font-size: 0.62rem; }
 .field-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .field { display: grid; gap: 7px; }
 .field > span, .merchant-field legend { color: #66716c; font-size: 0.68rem; font-weight: 800; }
+.field-source { display: inline-flex; margin-left: 4px; padding: 3px 6px; border-radius: 999px; color: #5f7569; background: #edf3ef; font-size: 0.54rem; font-style: normal; font-weight: 800; vertical-align: middle; }
+.field-source.source-needs_confirmation { color: #76529d; background: #f0e9fa; }
 .field input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid #dbe2dd; border-radius: 10px; outline: 0; color: #17211e; background: #fff; font-size: 0.78rem; }
 .field input:focus { border-color: #2ca874; box-shadow: 0 0 0 3px rgba(44, 168, 116, 0.08); }
+.field.needs-confirmation input { border-color: #bca2dc; background: #fdfbff; box-shadow: 0 0 0 3px rgba(121, 85, 174, 0.07); }
 .unit-input { position: relative; }
 .unit-input input { padding-right: 32px; text-align: right; }
 .unit-input b { position: absolute; top: 50%; right: 11px; color: #8c9690; font-size: 0.68rem; transform: translateY(-50%); }
 .merchant-field { margin: 0; padding: 0; border: 0; }
+.merchant-field.needs-confirmation { margin: -5px; padding: 10px; border: 1px solid #d6c6f2; border-radius: 12px; background: #fdfbff; }
 .merchant-field legend { margin-bottom: 8px; }
 .merchant-field > div { display: flex; flex-wrap: wrap; gap: 7px; }
 .merchant-check { display: inline-flex; align-items: center; gap: 7px; padding: 9px 10px; border: 1px solid #dce3de; border-radius: 10px; color: #67726c; background: #fff; font-size: 0.68rem; font-weight: 750; cursor: pointer; }

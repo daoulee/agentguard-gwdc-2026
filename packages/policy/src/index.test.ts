@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PurchaseRequest, SpendingPolicy } from "@agentguard/shared";
+import { mockProducts, type PurchaseRequest, type SpendingPolicy } from "@agentguard/shared";
 import { createFallbackPolicyDraft, evaluatePurchase, validatePolicyDraft } from "./index";
 
 const policy: SpendingPolicy = {
@@ -59,7 +59,7 @@ test("상품 가격과 수수료를 합산해 예산을 검사한다", () => {
 test("한국어 정책 문장에서 예산과 승인 한도를 추출한다", () => {
   const draft = createFallbackPolicyDraft(
     "승인된 판매자에서 10만원 이하 키보드를 구매하고 9만원이 넘으면 내 승인을 받아. 오늘까지.",
-    { availableMerchants: ["KeyboardLab", "TechStore"], now: new Date("2026-09-24T00:00:00.000Z") }
+    { availableProducts: mockProducts.filter((product) => product.merchant !== "UnlistedMarket"), now: new Date("2026-09-24T00:00:00.000Z") }
   );
 
   assert.equal(draft.budget, 100_000);
@@ -71,8 +71,24 @@ test("한국어 정책 문장에서 예산과 승인 한도를 추출한다", ()
 test("8만 5천원처럼 결합된 금액을 해석한다", () => {
   const draft = createFallbackPolicyDraft(
     "KeyboardLab에서 오늘 안에 8만 5천원 이하 키보드만 자동 구매해.",
-    { availableMerchants: ["KeyboardLab", "TechStore"], now: new Date("2026-09-24T00:00:00.000Z") }
+    { availableProducts: mockProducts.filter((product) => product.merchant !== "UnlistedMarket"), now: new Date("2026-09-24T00:00:00.000Z") }
   );
   assert.equal(draft.budget, 85_000);
   assert.equal(draft.autoApprovalLimit, 85_000);
+});
+
+test("게이밍 모니터 의도를 카탈로그에 맞게 보정하고 누락 조건을 질문한다", () => {
+  const draft = createFallbackPolicyDraft(
+    "승인된 판매자에서 게이밍 모니터를 30만원 이내로 구매해.",
+    { availableProducts: mockProducts.filter((product) => product.merchant !== "UnlistedMarket"), now: new Date("2026-09-24T00:00:00.000Z") }
+  );
+
+  assert.equal(draft.name, "게이밍 모니터 구매 위임");
+  assert.deepEqual(draft.allowedCategories, ["gaming_monitor"]);
+  assert.deepEqual(draft.allowedMerchants.sort(), ["DisplayHub", "TechStore"]);
+  assert.equal(draft.budget, 300_000);
+  assert.equal(draft.autoApprovalLimit, 0);
+  assert.deepEqual(draft.missingFields.sort(), ["autoApprovalLimit", "deadline"]);
+  assert.equal(validatePolicyDraft(draft, { allowIncomplete: true }).length, 0);
+  assert.ok(validatePolicyDraft(draft).length > 0);
 });
