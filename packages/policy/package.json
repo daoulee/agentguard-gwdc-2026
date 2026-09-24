@@ -7,10 +7,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/index.test.ts"
   },
   "dependencies": {
     "@agentguard/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest"
   }
 }
-

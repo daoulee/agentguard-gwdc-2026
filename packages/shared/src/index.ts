@@ -2,7 +2,9 @@ export type Currency = "KRW" | "USDT";
 
 export type SpendingPolicy = {
   id: string;
+  name: string;
   budget: number;
+  autoApprovalLimit: number;
   currency: Currency;
   allowedMerchants: string[];
   allowedCategories: string[];
@@ -40,16 +42,31 @@ export type DecisionReason =
 export type PolicyDecision = {
   status: "allow" | "block" | "needs_approval";
   reasons: DecisionReason[];
+  totalAmount: number;
   evaluatedAt: string;
 };
 
 export type AuditEvent = {
   id: string;
   requestId: string;
-  type: "policy_created" | "request_received" | "allowed" | "blocked" | "approved" | "submitted";
+  type:
+    | "policy_created"
+    | "request_received"
+    | "allowed"
+    | "blocked"
+    | "approval_requested"
+    | "approved"
+    | "rejected"
+    | "submitted";
   occurredAt: string;
   details: Record<string, unknown>;
   transactionHash?: string;
+};
+
+export type PurchaseEvaluation = {
+  product: Product;
+  request: PurchaseRequest;
+  decision: PolicyDecision;
 };
 
 export type HealthResponse = {
@@ -81,4 +98,3 @@ export const mockProducts: Product[] = [
     priceKrw: 65000
   }
 ];
-

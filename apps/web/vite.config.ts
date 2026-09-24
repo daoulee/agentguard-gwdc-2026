@@ -10,6 +10,9 @@ export default defineConfig({
     }
   },
   preview: {
-    allowedHosts: [".trycloudflare.com"]
+    allowedHosts: [".trycloudflare.com"],
+    proxy: {
+      "/api": "http://localhost:8787"
+    }
   }
 });
