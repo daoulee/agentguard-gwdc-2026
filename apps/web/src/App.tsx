@@ -3,6 +3,7 @@ import {
   merchantDirectory,
   mockProducts,
   type AiStatusResponse,
+  type AiUsageRecord,
   type AuditEvent,
   type DecisionReason,
   type PolicyDraft,
@@ -29,6 +30,10 @@ const policyTemplates = [
 ];
 
 type SectionId = (typeof navigationItems)[number]["id"];
+type ChainStatus = { configured: boolean; chainId: number; network: string };
+type AnchorRecord = { transactionHash: string; anchoredHash: string; chainId: number; blockNumber: number };
+type PendingAnchor = { transactionHash: string; auditHash: string };
+type WalletProvider = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
 
 const decisionCopy = {
   allow: { label: "자동 승인", caption: "정책 범위 안에서 안전하게 실행할 수 있습니다." },
@@ -42,7 +47,8 @@ const reasonLabels: Record<DecisionReason, string> = {
   merchant_not_allowed: "허용되지 않은 판매자",
   category_not_allowed: "허용되지 않은 카테고리",
   deadline_expired: "정책 유효 기한 만료",
-  human_approval_required: "자동 승인 한도 초과"
+  human_approval_required: "자동 승인 한도 초과",
+  delegation_stopped: "사용자가 지출 위임을 중지함"
 };
 
 const eventLabels: Record<AuditEvent["type"], string> = {
@@ -53,7 +59,8 @@ const eventLabels: Record<AuditEvent["type"], string> = {
   approval_requested: "승인 요청",
   approved: "사용자 승인",
   rejected: "사용자 거절",
-  submitted: "거래 제출"
+  submitted: "감사 해시 온체인 기록",
+  delegation_stopped: "지출 위임 중지"
 };
 
 const sourceLabels = {
@@ -132,9 +139,21 @@ export function App() {
   const [evaluation, setEvaluation] = useState<PurchaseEvaluation | null>(null);
   const [approvals, setApprovals] = useState<PurchaseEvaluation[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [chainStatus, setChainStatus] = useState<ChainStatus | null>(null);
+  const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem("agentguard-pending-anchor") ?? "null") as PendingAnchor | null;
+    } catch {
+      return null;
+    }
+  });
+  const [isAnchoring, setIsAnchoring] = useState(false);
+  const [isVerifyingAnchor, setIsVerifyingAnchor] = useState(false);
+  const [selectedReceiptId, setSelectedReceiptId] = useState("");
+  const [receipt, setReceipt] = useState<{ requestId: string; events: AuditEvent[]; anchors: AnchorRecord[]; integrityValid: boolean } | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageRecord[]>([]);
   const [integrityValid, setIntegrityValid] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
-  const [isDemoRunning, setIsDemoRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [actionToast, setActionToast] = useState<{ message: string; tone: "success" | "neutral" | "danger" } | null>(null);
   const [resolvingApproval, setResolvingApproval] = useState<{ id: string; action: "approve" | "reject" } | null>(null);
@@ -142,6 +161,7 @@ export function App() {
   const navigationTimerRef = useRef<number | undefined>(undefined);
   const flowTimerRef = useRef<number | undefined>(undefined);
   const toastTimerRef = useRef<number | undefined>(undefined);
+  const interpretationRequestRef = useRef<AbortController | null>(null);
 
   const showToast = useCallback((message: string, tone: "success" | "neutral" | "danger" = "success") => {
     setActionToast({ message, tone });
@@ -159,13 +179,19 @@ export function App() {
   }, []);
 
   const refreshActivity = useCallback(async () => {
-    const [approvalPayload, auditPayload] = await Promise.all([
+    const [approvalPayload, auditPayload, usagePayload, policyPayload, chainPayload] = await Promise.all([
       requestJson<{ approvals: PurchaseEvaluation[] }>("/api/approvals"),
-      requestJson<{ events: AuditEvent[]; integrityValid: boolean }>("/api/audit")
+      requestJson<{ events: AuditEvent[]; integrityValid: boolean }>("/api/audit"),
+      requestJson<{ records: AiUsageRecord[] }>("/api/ai/usage"),
+      requestJson<{ policy: SpendingPolicy }>("/api/policy"),
+      requestJson<ChainStatus>("/api/chain/status")
     ]);
     setApprovals(approvalPayload.approvals);
     setAuditEvents(auditPayload.events);
     setIntegrityValid(auditPayload.integrityValid);
+    setAiUsage(usagePayload.records);
+    setPolicy(policyPayload.policy);
+    setChainStatus(chainPayload);
   }, []);
 
   useEffect(() => {
@@ -221,6 +247,9 @@ export function App() {
   };
 
   const interpretPrompt = async () => {
+    interpretationRequestRef.current?.abort();
+    const controller = new AbortController();
+    interpretationRequestRef.current = controller;
     setIsInterpreting(true);
     setErrorMessage("");
     setPolicyNotice("");
@@ -228,18 +257,34 @@ export function App() {
       const payload = await requestJson<{ draft: PolicyDraft }>("/api/policies/interpret", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: policyPrompt })
+        body: JSON.stringify({ prompt: policyPrompt }),
+        signal: controller.signal
       });
+      if (interpretationRequestRef.current !== controller) return;
       setPolicyDraft(payload.draft);
+      await refreshActivity();
       showToast("정책 초안을 만들었습니다. 내용을 확인해주세요.", "neutral");
       if (window.innerWidth <= 960) {
         window.setTimeout(() => document.getElementById("policy-review")?.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
       }
     } catch (error) {
+      if (controller.signal.aborted) return;
       setErrorMessage(error instanceof Error ? error.message : "정책 해석에 실패했습니다.");
     } finally {
-      setIsInterpreting(false);
+      if (interpretationRequestRef.current === controller) {
+        interpretationRequestRef.current = null;
+        setIsInterpreting(false);
+      }
     }
+  };
+
+  const changePrompt = (value: string) => {
+    interpretationRequestRef.current?.abort();
+    interpretationRequestRef.current = null;
+    setIsInterpreting(false);
+    setPolicyPrompt(value);
+    setPolicyDraft(null);
+    setPolicyNotice("");
   };
 
   const resolveMissingField = (draft: PolicyDraft, field: PolicyMissingField) => {
@@ -344,28 +389,6 @@ export function App() {
     }
   };
 
-  const runDemoSequence = async () => {
-    setIsDemoRunning(true);
-    setErrorMessage("");
-    try {
-      await requestJson("/api/reset", { method: "POST" });
-      let lastEvaluation: PurchaseEvaluation | null = null;
-      for (const product of policyProducts) {
-        const payload = await evaluateProduct(product.id, 0);
-        lastEvaluation = payload.evaluation;
-      }
-      setEvaluation(lastEvaluation);
-      setSelectedProductId(policyProducts.at(-1)?.id ?? selectedProductId);
-      await refreshActivity();
-      showToast("세 가지 판정을 완료했습니다. 승인 대기 건을 확인해주세요.", "neutral");
-      moveToSection("approvals", 1_000);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "데모 시나리오 실행에 실패했습니다.");
-    } finally {
-      setIsDemoRunning(false);
-    }
-  };
-
   const resolveApproval = async (requestId: string, action: "approve" | "reject") => {
     setErrorMessage("");
     setResolvingApproval({ id: requestId, action });
@@ -386,14 +409,83 @@ export function App() {
     }
   };
 
-  const resetDemo = async () => {
+  const stopDelegation = async () => {
     try {
-      await requestJson("/api/reset", { method: "POST" });
-      setEvaluation(null);
+      const payload = await requestJson<{ policy: SpendingPolicy }>("/api/policy/stop", { method: "POST" });
+      setPolicy(payload.policy);
       await refreshActivity();
+      showToast("지출 위임을 중지했습니다. 대기 중인 요청도 무효화했습니다.", "danger");
+      moveToSection("audit", 700);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "기록 초기화에 실패했습니다.");
+      setErrorMessage(error instanceof Error ? error.message : "위임 중지에 실패했습니다.");
     }
+  };
+
+  const loadReceipt = async (requestId: string) => {
+    try {
+      setReceipt(await requestJson<{ requestId: string; events: AuditEvent[]; anchors: AnchorRecord[]; integrityValid: boolean }>(`/api/receipts/${encodeURIComponent(requestId)}`));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "영수증을 불러오지 못했습니다.");
+    }
+  };
+
+  const submitAuditAnchor = async () => {
+    setIsAnchoring(true);
+    setErrorMessage("");
+    try {
+      const wallet = (window as Window & { ethereum?: WalletProvider }).ethereum;
+      if (!wallet) throw new Error("브라우저에 EVM 지갑이 필요합니다.");
+      const payload = await requestJson<{ auditHash: string; chainId: number; data: string }>("/api/audit/anchor-payload");
+      const currentChainId = await wallet.request({ method: "eth_chainId" });
+      if (BigInt(String(currentChainId)) !== BigInt(payload.chainId)) {
+        throw new Error("지갑 네트워크를 Ethereum Sepolia로 바꿔주세요.");
+      }
+      const accounts = await wallet.request({ method: "eth_requestAccounts" }) as string[];
+      const account = accounts[0];
+      if (!account) throw new Error("지갑 계정을 선택해주세요.");
+      const transactionHash = await wallet.request({
+        method: "eth_sendTransaction",
+        params: [{ from: account, to: account, value: "0x0", data: payload.data }]
+      });
+      if (typeof transactionHash !== "string" || !/^0x[0-9a-f]{64}$/i.test(transactionHash)) {
+        throw new Error("지갑이 거래 해시를 반환하지 않았습니다.");
+      }
+      const pending = { transactionHash, auditHash: payload.auditHash };
+      setPendingAnchor(pending);
+      window.localStorage.setItem("agentguard-pending-anchor", JSON.stringify(pending));
+      showToast("테스트넷 거래를 제출했습니다. 확정 후 검증 버튼을 눌러주세요.", "neutral");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "테스트넷 거래를 제출하지 못했습니다.");
+    } finally {
+      setIsAnchoring(false);
+    }
+  };
+
+  const verifyPendingAnchor = async () => {
+    if (!pendingAnchor) return;
+    setIsVerifyingAnchor(true);
+    setErrorMessage("");
+    try {
+      await requestJson("/api/audit/anchors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingAnchor)
+      });
+      setPendingAnchor(null);
+      window.localStorage.removeItem("agentguard-pending-anchor");
+      setReceipt(null);
+      await refreshActivity();
+      showToast("테스트넷 거래와 감사 기록이 연결됐습니다.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "거래를 아직 검증하지 못했습니다.");
+    } finally {
+      setIsVerifyingAnchor(false);
+    }
+  };
+
+  const clearPendingAnchor = () => {
+    setPendingAnchor(null);
+    window.localStorage.removeItem("agentguard-pending-anchor");
   };
 
   const policyProducts = useMemo(() => {
@@ -416,6 +508,10 @@ export function App() {
   const decision = evaluation ? decisionCopy[evaluation.decision.status] : null;
   const allowedCount = auditEvents.filter((event) => event.type === "allowed" || event.type === "approved").length;
   const blockedCount = auditEvents.filter((event) => event.type === "blocked" || event.type === "rejected").length;
+  const receiptRequestIds = auditEvents.filter((event) => event.type === "request_received").map((event) => event.requestId);
+  const receiptInput = receipt?.events.find((event) => event.type === "request_received");
+  const receiptPolicy = receiptInput?.details.policySnapshot as SpendingPolicy | undefined;
+  const budgetExhausted = Boolean(policy && policy.spentKrw + policy.reservedKrw >= policy.budget);
 
   return (
     <div className="app-shell">
@@ -449,7 +545,7 @@ export function App() {
           <div className="policy-preview" aria-label="활성 지출 정책 미리보기">
             <div className="preview-header">
               <div><p className="micro-label">ACTIVE POLICY · V{policy?.version ?? 1}</p><h2>{policy?.name ?? "정책 불러오는 중"}</h2></div>
-              <span className="live-badge"><i /> 적용 중</span>
+              <span className={policy?.status === "stopped" || budgetExhausted ? "live-badge is-stopped" : "live-badge"}><i /> {policy?.status === "stopped" ? "중지됨" : budgetExhausted ? "예산 소진" : "적용 중"}</span>
             </div>
             <div className="policy-statement">“{policy?.sourceText ?? "정책을 불러오고 있습니다."}”</div>
             <dl className="policy-grid">
@@ -457,8 +553,10 @@ export function App() {
               <div><dt>자동 승인</dt><dd>{policy ? `${formatKrw(policy.autoApprovalLimit)} 이하` : "-"}</dd></div>
               <div><dt>허용 판매자</dt><dd>{policy?.allowedMerchants.length ?? 0}곳</dd></div>
               <div><dt>유효 기한</dt><dd>{policy ? formatDeadline(policy.deadline) : "-"}</dd></div>
+              <div><dt>사용한 예산</dt><dd>{policy ? formatKrw(policy.spentKrw) : "-"}</dd></div>
+              <div><dt>잔여 예산 (예약 제외)</dt><dd>{policy ? formatKrw(Math.max(0, policy.budget - policy.spentKrw - policy.reservedKrw)) : "-"}</dd></div>
             </dl>
-            <div className="policy-footer"><div className="avatar-stack" aria-hidden="true"><span>U</span><span>AI</span><span>✓</span></div><p>자연어 해석 → 사용자 확인 → 결정론적 검증</p></div>
+            <div className="policy-footer"><div className="avatar-stack" aria-hidden="true"><span>U</span><span>AI</span><span>✓</span></div><p>자연어 해석 → 사용자 확인 → 결정론적 검증</p>{policy?.status === "active" && <button className="stop-button" onClick={stopDelegation} type="button">지출 위임 중지</button>}</div>
           </div>
         </section>
 
@@ -477,11 +575,11 @@ export function App() {
           <div className="policy-builder">
             <div className="policy-input-pane">
               <div className="builder-step"><span>01</span><div><strong>지출 조건 작성</strong><p>금액, 판매자, 품목, 승인 기준과 기한을 포함하면 더 정확합니다.</p></div></div>
-              <textarea aria-label="자연어 지출 정책" maxLength={1000} onChange={(event) => { setPolicyPrompt(event.target.value); setPolicyDraft(null); setPolicyNotice(""); }} value={policyPrompt} />
+              <textarea aria-label="자연어 지출 정책" maxLength={1000} onChange={(event) => changePrompt(event.target.value)} value={policyPrompt} />
               <div className="prompt-footer"><span>{policyPrompt.length} / 1,000</span><span className={aiStatus?.configured ? "provider-chip is-ai" : "provider-chip"}>{aiStatus?.provider ?? "연결 확인 중"}</span></div>
               <div className="template-list">
                 <p>예시로 시작하기</p>
-                {policyTemplates.map((template, index) => <button key={template} onClick={() => { setPolicyPrompt(template); setPolicyDraft(null); setPolicyNotice(""); }} type="button">예시 {index + 1}</button>)}
+                {policyTemplates.map((template, index) => <button key={template} onClick={() => changePrompt(template)} type="button">예시 {index + 1}</button>)}
               </div>
               <button className="button button-primary interpret-button" disabled={isInterpreting || policyPrompt.trim().length < 10} onClick={interpretPrompt} type="button">
                 {isInterpreting ? <><span className="spinner" />정책 해석 중…</> : <>정책 초안 만들기 <ArrowIcon /></>}
@@ -495,9 +593,10 @@ export function App() {
               ) : (
                 <div className="draft-form">
                   <div className="draft-heading">
-                    <span className={`provider-chip ${policyDraft.provider === "kiln" ? "is-ai" : ""}`}>{policyDraft.provider === "kiln" ? "Kiln · Qwen 해석" : "안전 규칙 변환"}</span>
+                    <span className={`provider-chip ${policyDraft.provider === "kiln" ? "is-ai" : ""}`}>{policyDraft.provider === "kiln" ? `Kiln · ${aiStatus?.model ?? "모델 확인 필요"} 해석` : "안전 규칙 변환"}</span>
                     <span>적용 전 초안</span>
                   </div>
+                  <p className="draft-source">해석한 문장: “{policyDraft.sourceText}”</p>
                   {policyDraft.missingFields.length > 0 && (
                     <div className="clarification-card" role="status">
                       <div><span>?</span><strong>적용 전에 {policyDraft.missingFields.length}가지만 확인해주세요</strong></div>
@@ -527,7 +626,7 @@ export function App() {
         <section className="section" id="simulator">
           <div className="section-heading simulator-heading">
             <div><p className="micro-label">LIVE POLICY SIMULATOR</p><h2>AI 구매 요청을 실행해보세요</h2></div>
-            <div className="heading-actions"><p>상품 하나를 고르면 현재 정책을 기준으로 판정합니다.</p><button disabled={isDemoRunning} onClick={runDemoSequence} type="button">{isDemoRunning ? "데모 실행 중…" : "핵심 3건 자동 실행"}</button></div>
+            <div className="heading-actions"><p>승인 대기 건을 먼저 거절한 뒤 정상 구매와 미등록 판매자 요청을 실행하면 세 가지 판정을 확인할 수 있습니다.</p></div>
           </div>
 
           <div className="simulator-layout">
@@ -566,8 +665,11 @@ export function App() {
         </section>
 
         <section className="section audit-section" id="audit">
-          <div className="section-heading compact-heading"><div><p className="micro-label">TAMPER-EVIDENT AUDIT TRAIL</p><h2>감사 로그</h2></div><div className="audit-actions"><span className={integrityValid ? "integrity-badge" : "integrity-badge is-invalid"}>{integrityValid ? "✓ 해시 체인 정상" : "! 기록 검증 실패"}</span><button className="text-button" onClick={resetDemo} type="button">기록 초기화</button></div></div>
+          <div className="section-heading compact-heading"><div><p className="micro-label">TAMPER-EVIDENT AUDIT TRAIL</p><h2>감사 로그</h2></div><div className="audit-actions"><span className={integrityValid ? "integrity-badge" : "integrity-badge is-invalid"}>{integrityValid ? "✓ 해시 체인 정상" : "! 기록 검증 실패"}</span></div></div>
           {auditEvents.length === 0 ? <div className="empty-state"><span>⌁</span><div><strong>기록된 이벤트가 없습니다</strong><p>첫 구매 요청부터 모든 판단 근거가 해시로 연결되어 저장됩니다.</p></div></div> : <div className="audit-table" role="table" aria-label="정책 감사 로그">{auditEvents.map((event) => <div className="audit-row" role="row" key={event.id}><span className={`event-dot event-${event.type}`} /><div><strong>{eventLabels[event.type]}</strong><span>{String(event.details.product ?? event.details.name ?? event.requestId.split("-").slice(-2).join("-"))}</span></div><code title={event.hash}>#{event.hash.slice(0, 8)}</code><time dateTime={event.occurredAt}>{formatTime(event.occurredAt)}</time></div>)}</div>}
+          {auditEvents.length > 0 && <div className="anchor-panel"><div><strong>감사 해시 테스트넷 기록</strong><p>최신 해시 #{auditEvents[0]?.hash.slice(0, 16)}… · {chainStatus?.network ?? "네트워크 확인 중"}</p><p>자기 지갑 주소로 0 ETH 거래를 보내고 거래 데이터에 감사 해시를 기록합니다. 테스트넷 가스가 필요합니다.</p></div>{!chainStatus?.configured ? <span>Sepolia RPC 설정 필요</span> : pendingAnchor ? <div className="anchor-actions"><code title={pendingAnchor.transactionHash}>{pendingAnchor.transactionHash.slice(0, 14)}…</code><button disabled={isVerifyingAnchor} onClick={verifyPendingAnchor} type="button">{isVerifyingAnchor ? "검증 중…" : "확정 거래 검증"}</button><button className="anchor-clear" onClick={clearPendingAnchor} title="블록체인 거래는 취소되지 않습니다." type="button">대기 표시 지우기</button></div> : <button disabled={isAnchoring || !integrityValid} onClick={submitAuditAnchor} type="button">{isAnchoring ? "지갑 확인 중…" : "지갑으로 해시 기록"}</button>}</div>}
+          {receiptRequestIds.length > 0 && <div className="receipt-panel"><div className="receipt-controls"><div><strong>구매 판단 영수증</strong><p>요청 당시 정책과 이후 판정을 한곳에서 확인합니다.</p></div><select aria-label="영수증 요청 선택" onChange={(event) => { setSelectedReceiptId(event.target.value); setReceipt(null); }} value={selectedReceiptId || receiptRequestIds[0]}>{receiptRequestIds.map((id) => <option key={id} value={id}>{id}</option>)}</select><button onClick={() => loadReceipt(selectedReceiptId || receiptRequestIds[0] || "")} type="button">영수증 보기</button></div>{receipt && <div className="receipt-body">{receiptPolicy ? <p>정책 v{receiptPolicy.version} · 예산 {formatKrw(receiptPolicy.budget)} · 허용 판매자 {receiptPolicy.allowedMerchants.join(", ")} · 카테고리 {receiptPolicy.allowedCategories.join(", ")} · 기한 {formatDeadline(receiptPolicy.deadline)}</p> : <p>이전 기록에는 정책 스냅샷이 없어 허용 범위를 완전히 재구성할 수 없습니다.</p>}<p>요청 총액 {formatKrw(Number(receiptInput?.details.totalAmount ?? 0))} · 기록 검증 {receipt.integrityValid ? "정상" : "실패"}</p><ol>{receipt.events.map((event) => <li key={event.id}>{eventLabels[event.type]} · {formatTime(event.occurredAt)} · #{event.hash.slice(0, 12)}</li>)}</ol><div className="receipt-anchors">{receipt.anchors.length === 0 ? <p>온체인 거래 해시: 아직 연결되지 않음</p> : receipt.anchors.map((anchor) => <p key={anchor.transactionHash}>Sepolia 블록 {anchor.blockNumber} · <a href={`https://sepolia.etherscan.io/tx/${anchor.transactionHash}`} rel="noreferrer" target="_blank">거래 #{anchor.transactionHash.slice(0, 16)}…</a> · 기록 해시 #{anchor.anchoredHash.slice(0, 12)}…</p>)}</div></div>}</div>}
+          <div className="usage-panel"><strong>AI 추론 사용량 · 정책 해석 흐름</strong>{aiUsage.length === 0 ? <p>아직 정책 해석 기록이 없습니다.</p> : aiUsage.slice(0, 5).map((record) => <p key={record.id}>{formatTime(record.occurredAt)} · {record.status === "success" ? record.model : record.status === "failed" ? "Kiln 실패 · 안전 규칙 전환" : "Kiln 미설정 · 안전 규칙"} · 입력 {record.promptTokens ?? "측정 안 됨"} / 출력 {record.completionTokens ?? "측정 안 됨"} / 합계 {record.totalTokens ?? "측정 안 됨"} 토큰</p>)}</div>
         </section>
       </main>
 

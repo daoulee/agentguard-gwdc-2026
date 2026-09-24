@@ -16,7 +16,10 @@ const policy: SpendingPolicy = {
   sourceText: "테스트 정책",
   interpretationProvider: "safe_fallback",
   version: 1,
-  updatedAt: "2026-09-24T00:00:00.000Z"
+  updatedAt: "2026-09-24T00:00:00.000Z",
+  status: "active",
+  spentKrw: 0,
+  reservedKrw: 0
 };
 
 const createRequest = (overrides: Partial<PurchaseRequest> = {}): PurchaseRequest => ({
@@ -54,6 +57,21 @@ test("상품 가격과 수수료를 합산해 예산을 검사한다", () => {
   assert.equal(decision.status, "block");
   assert.equal(decision.totalAmount, 103_000);
   assert.ok(decision.reasons.includes("budget_exceeded"));
+});
+
+test("이미 지출하거나 승인 대기 중인 금액을 총예산에서 차감한다", () => {
+  const decision = evaluatePurchase(
+    { ...policy, spentKrw: 20_000, reservedKrw: 10_000 },
+    createRequest({ amount: 65_000, fee: 6_000 })
+  );
+  assert.equal(decision.status, "block");
+  assert.ok(decision.reasons.includes("budget_exceeded"));
+});
+
+test("사용자가 위임을 중지하면 허용 범위 안의 요청도 차단한다", () => {
+  const decision = evaluatePurchase({ ...policy, status: "stopped" }, createRequest());
+  assert.equal(decision.status, "block");
+  assert.ok(decision.reasons.includes("delegation_stopped"));
 });
 
 test("한국어 정책 문장에서 예산과 승인 한도를 추출한다", () => {

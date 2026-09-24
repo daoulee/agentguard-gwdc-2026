@@ -16,10 +16,12 @@ export const evaluatePurchase: PolicyEvaluator = (policy, request) => {
   const reasons: PolicyDecision["reasons"] = [];
   const totalAmount = request.amount + request.fee;
 
+  if (policy.status === "stopped") reasons.push("delegation_stopped");
+
   if (new Date(request.requestedAt).getTime() > new Date(policy.deadline).getTime()) {
     reasons.push("deadline_expired");
   }
-  if (totalAmount > policy.budget) reasons.push("budget_exceeded");
+  if (policy.spentKrw + policy.reservedKrw + totalAmount > policy.budget) reasons.push("budget_exceeded");
   if (!policy.allowedMerchants.includes(request.merchant)) reasons.push("merchant_not_allowed");
   if (!policy.allowedCategories.includes(request.category)) reasons.push("category_not_allowed");
 
@@ -192,6 +194,9 @@ export function validatePolicyDraft(draft: PolicyDraft, options: { allowIncomple
     errors.push("자동 승인 한도는 0 이상이어야 합니다.");
   }
   if (draft.autoApprovalLimit > draft.budget) errors.push("자동 승인 한도는 최대 예산보다 클 수 없습니다.");
+  if (!draft.requireHumanApproval && draft.autoApprovalLimit < draft.budget) {
+    errors.push("사람의 승인을 사용하지 않으면 자동 승인 한도는 최대 예산과 같아야 합니다.");
+  }
   if (draft.allowedMerchants.length === 0) errors.push("허용 판매자를 한 곳 이상 선택해야 합니다.");
   if (draft.allowedCategories.length === 0) errors.push("허용 카테고리를 한 개 이상 선택해야 합니다.");
   if (!Number.isFinite(new Date(draft.deadline).getTime())) errors.push("유효한 정책 기한이 필요합니다.");

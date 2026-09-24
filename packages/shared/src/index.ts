@@ -35,6 +35,9 @@ export type SpendingPolicy = {
   interpretationProvider: PolicyInterpretationProvider;
   version: number;
   updatedAt: string;
+  status: "active" | "stopped";
+  spentKrw: number;
+  reservedKrw: number;
 };
 
 export type Product = {
@@ -69,7 +72,8 @@ export type DecisionReason =
   | "merchant_not_allowed"
   | "category_not_allowed"
   | "deadline_expired"
-  | "human_approval_required";
+  | "human_approval_required"
+  | "delegation_stopped";
 
 export type PolicyDecision = {
   status: "allow" | "block" | "needs_approval";
@@ -89,7 +93,8 @@ export type AuditEvent = {
     | "approval_requested"
     | "approved"
     | "rejected"
-    | "submitted";
+    | "submitted"
+    | "delegation_stopped";
   occurredAt: string;
   details: Record<string, unknown>;
   previousHash: string;
@@ -110,9 +115,21 @@ export type HealthResponse = {
 };
 
 export type AiStatusResponse = {
-  provider: "Kiln · Qwen3-32B" | "Safe fallback parser";
+  provider: string;
   configured: boolean;
   model: string;
+};
+
+export type AiUsageRecord = {
+  id: string;
+  flow: "policy_interpretation";
+  provider: PolicyInterpretationProvider;
+  model: string;
+  status: "success" | "failed" | "not_configured";
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  occurredAt: string;
 };
 
 export const mockProducts: Product[] = [
