@@ -114,8 +114,27 @@ export function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [isDemoRunning, setIsDemoRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [actionToast, setActionToast] = useState<{ message: string; tone: "success" | "neutral" | "danger" } | null>(null);
+  const [resolvingApproval, setResolvingApproval] = useState<{ id: string; action: "approve" | "reject" } | null>(null);
   const navigationLockRef = useRef(false);
   const navigationTimerRef = useRef<number | undefined>(undefined);
+  const flowTimerRef = useRef<number | undefined>(undefined);
+  const toastTimerRef = useRef<number | undefined>(undefined);
+
+  const showToast = useCallback((message: string, tone: "success" | "neutral" | "danger" = "success") => {
+    setActionToast({ message, tone });
+    if (toastTimerRef.current !== undefined) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setActionToast(null), 2_600);
+  }, []);
+
+  const moveToSection = useCallback((id: SectionId, delay = 700) => {
+    if (flowTimerRef.current !== undefined) window.clearTimeout(flowTimerRef.current);
+    flowTimerRef.current = window.setTimeout(() => {
+      setActiveSection(id);
+      window.history.replaceState(null, "", `#${id}`);
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, delay);
+  }, []);
 
   const refreshActivity = useCallback(async () => {
     const [approvalPayload, auditPayload] = await Promise.all([
@@ -161,6 +180,8 @@ export function App() {
     return () => {
       window.removeEventListener("scroll", updateActiveSection);
       if (navigationTimerRef.current !== undefined) window.clearTimeout(navigationTimerRef.current);
+      if (flowTimerRef.current !== undefined) window.clearTimeout(flowTimerRef.current);
+      if (toastTimerRef.current !== undefined) window.clearTimeout(toastTimerRef.current);
     };
   }, []);
 
@@ -188,6 +209,10 @@ export function App() {
         body: JSON.stringify({ prompt: policyPrompt })
       });
       setPolicyDraft(payload.draft);
+      showToast("정책 초안을 만들었습니다. 내용을 확인해주세요.", "neutral");
+      if (window.innerWidth <= 960) {
+        window.setTimeout(() => document.getElementById("policy-review")?.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "정책 해석에 실패했습니다.");
     } finally {
@@ -225,6 +250,8 @@ export function App() {
       setEvaluation(null);
       setPolicyNotice(`정책 v${payload.policy.version}이 현재 지출 방화벽에 적용됐습니다.`);
       await refreshActivity();
+      showToast(`정책 v${payload.policy.version} 저장 완료 · 시뮬레이터로 이동합니다.`);
+      moveToSection("simulator", 900);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "정책 적용에 실패했습니다.");
     } finally {
@@ -245,6 +272,16 @@ export function App() {
       const payload = await evaluateProduct(selectedProductId, fee);
       setEvaluation(payload.evaluation);
       await refreshActivity();
+      if (payload.evaluation.decision.status === "needs_approval") {
+        showToast("사용자 확인이 필요한 거래입니다. 승인함으로 이동합니다.", "neutral");
+        moveToSection("approvals", 1_250);
+      } else if (payload.evaluation.decision.status === "block") {
+        showToast("정책 위반 거래를 차단했습니다. 감사 로그로 이동합니다.", "danger");
+        moveToSection("audit", 1_250);
+      } else {
+        showToast("정책 범위 안에서 자동 승인했습니다. 감사 로그로 이동합니다.");
+        moveToSection("audit", 1_250);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "정책 검사에 실패했습니다.");
     } finally {
@@ -265,6 +302,8 @@ export function App() {
       setEvaluation(lastEvaluation);
       setSelectedProductId(mockProducts[2]?.id ?? selectedProductId);
       await refreshActivity();
+      showToast("세 가지 판정을 완료했습니다. 승인 대기 건을 확인해주세요.", "neutral");
+      moveToSection("approvals", 1_000);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "데모 시나리오 실행에 실패했습니다.");
     } finally {
@@ -274,15 +313,21 @@ export function App() {
 
   const resolveApproval = async (requestId: string, action: "approve" | "reject") => {
     setErrorMessage("");
+    setResolvingApproval({ id: requestId, action });
     try {
+      await new Promise((resolve) => window.setTimeout(resolve, 220));
       await requestJson(`/api/approvals/${requestId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action })
       });
       await refreshActivity();
+      showToast(action === "approve" ? "거래를 승인하고 감사 기록에 저장했습니다." : "거래를 거절하고 감사 기록에 저장했습니다.", action === "approve" ? "success" : "danger");
+      moveToSection("audit", 650);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "승인 처리에 실패했습니다.");
+    } finally {
+      setResolvingApproval(null);
     }
   };
 
@@ -320,6 +365,7 @@ export function App() {
       </nav>
 
       {errorMessage && <div className="error-banner" role="alert"><span>!</span>{errorMessage}<button onClick={() => setErrorMessage("")} type="button">닫기</button></div>}
+      {actionToast && <div aria-live="polite" className={`action-toast toast-${actionToast.tone}`} role="status"><span>{actionToast.tone === "success" ? "✓" : actionToast.tone === "danger" ? "!" : "→"}</span>{actionToast.message}</div>}
 
       <main>
         <section className="hero" id="overview">
@@ -375,7 +421,7 @@ export function App() {
               </button>
             </div>
 
-            <div className="policy-review-pane">
+            <div className="policy-review-pane" id="policy-review">
               <div className="builder-step"><span>02</span><div><strong>해석 결과 확인</strong><p>숫자와 허용 범위를 직접 고친 뒤 최종 적용하세요.</p></div></div>
               {!policyDraft ? (
                 <div className="review-empty"><span className="empty-shield"><ShieldMark /></span><strong>아직 정책 초안이 없습니다</strong><p>왼쪽 문장을 해석하면 구조화된 규칙이 여기에 표시됩니다.</p></div>
@@ -442,7 +488,7 @@ export function App() {
 
         <section className="section approval-section" id="approvals">
           <div className="section-heading compact-heading"><div><p className="micro-label">HUMAN IN THE LOOP</p><h2>승인 대기함</h2></div><span className="dataset-count">{approvals.length} pending</span></div>
-          {approvals.length === 0 ? <div className="empty-state"><span>✓</span><div><strong>대기 중인 요청이 없습니다</strong><p>자동 승인 한도를 초과하고 최대 예산 이하인 거래가 여기에 표시됩니다.</p></div></div> : <div className="approval-list">{approvals.map((item) => <article className="approval-card" key={item.request.id}><div><p className="approval-kicker">APPROVAL REQUIRED</p><h3>{item.product.name}</h3><p>{item.product.merchant} · 요청 {formatTime(item.request.requestedAt)}</p></div><strong className="approval-price">{formatKrw(item.decision.totalAmount)}</strong><div className="approval-actions"><button className="button reject-button" onClick={() => resolveApproval(item.request.id, "reject")} type="button">거절</button><button className="button approve-button" onClick={() => resolveApproval(item.request.id, "approve")} type="button">승인</button></div></article>)}</div>}
+          {approvals.length === 0 ? <div className="empty-state"><span>✓</span><div><strong>대기 중인 요청이 없습니다</strong><p>자동 승인 한도를 초과하고 최대 예산 이하인 거래가 여기에 표시됩니다.</p></div></div> : <div className="approval-list">{approvals.map((item) => { const transition = resolvingApproval?.id === item.request.id ? `is-resolving is-${resolvingApproval.action}` : ""; return <article className={`approval-card ${transition}`} key={item.request.id}><div><p className="approval-kicker">APPROVAL REQUIRED</p><h3>{item.product.name}</h3><p>{item.product.merchant} · 요청 {formatTime(item.request.requestedAt)}</p></div><strong className="approval-price">{formatKrw(item.decision.totalAmount)}</strong><div className="approval-actions"><button className="button reject-button" disabled={resolvingApproval !== null} onClick={() => resolveApproval(item.request.id, "reject")} type="button">{resolvingApproval?.id === item.request.id && resolvingApproval.action === "reject" ? "거절 중…" : "거절"}</button><button className="button approve-button" disabled={resolvingApproval !== null} onClick={() => resolveApproval(item.request.id, "approve")} type="button">{resolvingApproval?.id === item.request.id && resolvingApproval.action === "approve" ? "승인 중…" : "승인"}</button></div></article>; })}</div>}
         </section>
 
         <section className="section audit-section" id="audit">
