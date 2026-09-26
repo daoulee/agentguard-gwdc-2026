@@ -589,6 +589,7 @@ export function App() {
           <article><span className="metric-dot metric-dot-green" /><div><strong>{allowedCount}</strong><p>승인된 요청</p></div></article>
           <article><span className="metric-dot metric-dot-blue" /><div><strong>{approvals.length}</strong><p>승인 대기</p></div></article>
           <article><span className="metric-dot metric-dot-violet" /><div><strong>{blockedCount}</strong><p>차단·거절</p></div></article>
+          <article><span className="metric-dot metric-dot-mint" /><div><strong>{energy ? Math.round(energy.reductionRatio * 100) + "%" : "—"}</strong><p>추론 절감<span className="metric-hint"> · 판정은 코드가</span></p></div></article>
         </section>
 
         <section className="section" id="policy">

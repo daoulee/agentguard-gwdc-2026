@@ -394,3 +394,7 @@ footer p { margin-bottom: 0; color: #8b948f; font-size: 0.72rem; }
 /* 데모 초기화 버튼 (감사 로그 헤더) */
 .reset-demo-button { padding: 6px 12px; border: 1px solid #d9c2b0; border-radius: 8px; color: #8a5a2b; background: #fdf6ee; font-size: 0.68rem; font-weight: 700; cursor: pointer; }
 .reset-demo-button:hover { background: #f7ead9; }
+
+/* 히어로 지표: 추론 절감 (에너지 효율 차별점) */
+.metric-dot-mint { background: #1fbf78; }
+.metric-hint { color: #8a978f; font-weight: 500; font-size: 0.82em; }
