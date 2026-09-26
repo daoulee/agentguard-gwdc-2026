@@ -66,6 +66,7 @@ Kiln 키·지갑 없이도 **Safe fallback**으로 3종 데모가 돈다. 실제
 | 지금 하려는 일 | 열 문서 |
 | --- | --- |
 | 데모 시나리오·발표 흐름 | `docs/ARCHITECTURE_AND_DEMO.md` |
+| 발표(5분)·Q&A 대비 | `docs/PITCH_DECK.md` |
 | 제출 요건·심사 대비 상태 | `docs/CHALLENGE_B_READINESS.md` |
 | 남은 할 일·대회 당일 체크리스트 | `docs/HACKATHON_TODO.md` |
 | 코드가 처음이라 구조 이해 | `docs/CODE_GUIDE_FOR_BEGINNERS.md` |

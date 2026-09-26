@@ -222,6 +222,17 @@ export function App() {
     });
   }, [refreshActivity]);
 
+  const resetDemo = useCallback(async () => {
+    if (!window.confirm("데모 상태를 초기화할까요? 누적 지출·감사 로그·승인·AI 사용량이 모두 지워집니다.")) return;
+    try {
+      await requestJson("/api/demo/reset", { method: "POST" });
+      await refreshActivity();
+      showToast("데모 상태를 초기화했습니다.", "success");
+    } catch {
+      showToast("초기화에 실패했습니다.", "danger");
+    }
+  }, [refreshActivity, showToast]);
+
   useEffect(() => {
     const updateActiveSection = () => {
       if (navigationLockRef.current) return;
@@ -679,7 +690,7 @@ export function App() {
         </section>
 
         <section className="section audit-section" id="audit">
-          <div className="section-heading compact-heading"><div><p className="micro-label">TAMPER-EVIDENT AUDIT TRAIL</p><h2>감사 로그</h2></div><div className="audit-actions"><span className={integrityValid ? "integrity-badge" : "integrity-badge is-invalid"}>{integrityValid ? "✓ 해시 체인 정상" : "! 기록 검증 실패"}</span></div></div>
+          <div className="section-heading compact-heading"><div><p className="micro-label">TAMPER-EVIDENT AUDIT TRAIL</p><h2>감사 로그</h2></div><div className="audit-actions"><span className={integrityValid ? "integrity-badge" : "integrity-badge is-invalid"}>{integrityValid ? "✓ 해시 체인 정상" : "! 기록 검증 실패"}</span><button className="reset-demo-button" onClick={resetDemo} type="button" title="데모 시연 전 상태를 초기화합니다.">데모 초기화</button></div></div>
           {auditEvents.length === 0 ? <div className="empty-state"><span>⌁</span><div><strong>기록된 이벤트가 없습니다</strong><p>첫 구매 요청부터 모든 판단 근거가 해시로 연결되어 저장됩니다.</p></div></div> : <div className="audit-table" role="table" aria-label="정책 감사 로그">{auditEvents.map((event) => <div className="audit-row" role="row" key={event.id}><span className={`event-dot event-${event.type}`} /><div><strong>{eventLabels[event.type]}</strong><span>{String(event.details.product ?? event.details.name ?? event.requestId.split("-").slice(-2).join("-"))}</span></div><code title={event.hash}>#{event.hash.slice(0, 8)}</code><time dateTime={event.occurredAt}>{formatTime(event.occurredAt)}</time></div>)}</div>}
           {auditEvents.length > 0 && <div className="anchor-panel"><div><strong>감사 해시 테스트넷 기록</strong><p>최신 해시 #{auditEvents[0]?.hash.slice(0, 16)}… · {chainStatus?.network ?? "네트워크 확인 중"}</p><p>자기 지갑 주소로 0 ETH 거래를 보내고 거래 데이터에 감사 해시를 기록합니다. 테스트넷 가스가 필요합니다.</p></div>{!chainStatus?.configured ? <span>Sepolia RPC 설정 필요</span> : pendingAnchor ? <div className="anchor-actions"><code title={pendingAnchor.transactionHash}>{pendingAnchor.transactionHash.slice(0, 14)}…</code><button disabled={isVerifyingAnchor} onClick={verifyPendingAnchor} type="button">{isVerifyingAnchor ? "검증 중…" : "확정 거래 검증"}</button><button className="anchor-clear" onClick={clearPendingAnchor} title="블록체인 거래는 취소되지 않습니다." type="button">대기 표시 지우기</button></div> : <button disabled={isAnchoring || !integrityValid} onClick={submitAuditAnchor} type="button">{isAnchoring ? "지갑 확인 중…" : "지갑으로 해시 기록"}</button>}</div>}
           {receiptRequestIds.length > 0 && <div className="receipt-panel"><div className="receipt-controls"><div><strong>구매 판단 영수증</strong><p>요청 당시 정책과 이후 판정을 한곳에서 확인합니다.</p></div><select aria-label="영수증 요청 선택" onChange={(event) => { setSelectedReceiptId(event.target.value); setReceipt(null); }} value={selectedReceiptId || receiptRequestIds[0]}>{receiptRequestIds.map((id) => <option key={id} value={id}>{id}</option>)}</select><button onClick={() => loadReceipt(selectedReceiptId || receiptRequestIds[0] || "")} type="button">영수증 보기</button></div>{receipt && <div className="receipt-body">{receiptPolicy ? <p>정책 v{receiptPolicy.version} · 예산 {formatKrw(receiptPolicy.budget)} · 허용 판매자 {receiptPolicy.allowedMerchants.join(", ")} · 카테고리 {receiptPolicy.allowedCategories.join(", ")} · 기한 {formatDeadline(receiptPolicy.deadline)}</p> : <p>이전 기록에는 정책 스냅샷이 없어 허용 범위를 완전히 재구성할 수 없습니다.</p>}<p>요청 총액 {formatKrw(Number(receiptInput?.details.totalAmount ?? 0))} · 기록 검증 {receipt.integrityValid ? "정상" : "실패"}</p><ol>{receipt.events.map((event) => <li key={event.id}>{eventLabels[event.type]} · {formatTime(event.occurredAt)} · #{event.hash.slice(0, 12)}</li>)}</ol><div className="receipt-anchors">{receipt.anchors.length === 0 ? <p>온체인 거래 해시: 아직 연결되지 않음</p> : receipt.anchors.map((anchor) => <p key={anchor.transactionHash}>Sepolia 블록 {anchor.blockNumber} · <a href={`https://sepolia.etherscan.io/tx/${anchor.transactionHash}`} rel="noreferrer" target="_blank">거래 #{anchor.transactionHash.slice(0, 16)}…</a> · 기록 해시 #{anchor.anchoredHash.slice(0, 12)}…</p>)}</div></div>}</div>}

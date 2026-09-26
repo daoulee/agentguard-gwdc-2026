@@ -390,3 +390,7 @@ footer p { margin-bottom: 0; color: #8b948f; font-size: 0.72rem; }
 .energy-grid small { display: block; margin-top: 4px; color: #6a776f; font-size: 0.64rem; }
 .energy-note { margin: 14px 0 0; color: #66736b; font-size: 0.68rem; line-height: 1.55; }
 @media (max-width: 560px) { .energy-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* 데모 초기화 버튼 (감사 로그 헤더) */
+.reset-demo-button { padding: 6px 12px; border: 1px solid #d9c2b0; border-radius: 8px; color: #8a5a2b; background: #fdf6ee; font-size: 0.68rem; font-weight: 700; cursor: pointer; }
+.reset-demo-button:hover { background: #f7ead9; }
