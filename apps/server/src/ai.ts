@@ -19,7 +19,7 @@ type UsageResult = Omit<AiUsageRecord, "id" | "occurredAt">;
 const getConfiguration = () => ({
   apiUrl: process.env.KILN_API_URL?.trim() ?? "",
   apiKey: process.env.KILN_API_KEY?.trim() ?? "",
-  model: process.env.KILN_MODEL?.trim() || "gpt-oss-120b"
+  model: process.env.KILN_MODEL?.trim() || "Qwen3-32B"
 });
 
 export function getAiStatus(): AiStatusResponse {

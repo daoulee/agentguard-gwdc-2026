@@ -52,7 +52,7 @@ test("Kiln 응답이 누락 조건을 숨겨도 확인을 요구하고 실제 �
   };
   try {
     const result = await interpretPolicy(prompt, trustedProducts);
-    assert.equal(requestedModel, "gpt-oss-120b");
+    assert.equal(requestedModel, "Qwen3-32B");
     assert.equal(result.draft.provider, "kiln");
     assert.equal(result.draft.name, "게이밍 모니터 구매 위임");
     assert.deepEqual(result.draft.allowedCategories, ["gaming_monitor"]);

@@ -2,7 +2,7 @@
 
 ## 역할
 
-- `feature/ai-kiln`: Kiln `gpt-oss-120b` 연동과 정책 JSON 생성
+- `feature/ai-kiln`: Kiln `Qwen3-32B` 연동과 정책 JSON 생성
 - `feature/frontend`: 사용자 화면과 감사 타임라인
 - `feature/policy-blockchain`: 정책 엔진, 지갑, 테스트넷 기록
 

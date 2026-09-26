@@ -61,7 +61,7 @@
 ```env
 KILN_API_URL=행사에서_받은_API_URL
 KILN_API_KEY=행사에서_받은_API_KEY
-KILN_MODEL=gpt-oss-120b
+KILN_MODEL=Qwen3-32B
 ```
 
 - [ ] API 키가 로그·스크린샷·Git에 노출되지 않았는지 확인
@@ -72,7 +72,7 @@ cd "/Users/daoule/Documents/Codex/2026-09-16/new-chat/agentguard"
 npm run dev
 ```
 
-- [ ] 화면 표시가 `Safe fallback parser`에서 `Kiln · gpt-oss-120b`로 바뀌는지 확인
+- [ ] 화면 표시가 `Safe fallback parser`에서 `Kiln · Qwen3-32B`로 바뀌는지 확인
 - [ ] 게이밍 모니터 예문으로 정책 초안을 생성
 - [ ] 카테고리와 판매자가 올바른 칸에 입력되는지 확인
 - [ ] 자동 승인 한도와 기한이 확인 질문으로 남는지 확인
