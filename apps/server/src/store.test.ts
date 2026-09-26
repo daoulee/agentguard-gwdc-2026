@@ -63,3 +63,15 @@ test("감사 로그가 변조되면 재시작 후 위임을 중지한다", () =>
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("reset은 누적 지출·감사·승인·AI 사용량을 초기화한다", () => {
+  const store = new DemoStore(join(tmpdir(), `agentguard-reset-${Math.random()}.json`));
+  store.recordAudit("r1", "allowed", { product: "x" });
+  store.recordAiUsage({ flow: "policy_interpretation", provider: "kiln", model: "Qwen3-32B", status: "success", promptTokens: 10, completionTokens: 5, totalTokens: 15 });
+  assert.ok(store.getAuditEvents().length > 0);
+  store.reset();
+  assert.equal(store.getAuditEvents().length, 0);
+  assert.equal(store.getAiUsage().length, 0);
+  assert.equal(store.getPendingApprovals().length, 0);
+  assert.equal(store.getPolicy().spentKrw, 0);
+});

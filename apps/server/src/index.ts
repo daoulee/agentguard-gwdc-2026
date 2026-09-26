@@ -201,6 +201,10 @@ app.post("/api/policies", (request, response) => {
   response.status(201).json({ policy });
 });
 
+app.post("/api/demo/reset", (_request, response) => {
+  const policy = store.reset();
+  response.json({ ok: true, policy });
+});
 app.post("/api/policy/stop", (_request, response) => {
   response.json({ policy: store.stopDelegation() });
 });

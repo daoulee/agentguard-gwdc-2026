@@ -85,6 +85,14 @@ export class DemoStore {
     renameSync(temporaryPath, this.stateFilePath);
   }
 
+  /** 데모/심사 전 상태를 초기값으로 되돌린다. 누적 지출·감사 로그·승인·AI 사용량을 비운다. */
+  reset() {
+    this.state = { activePolicy: createDefaultPolicy(), auditEvents: [], pendingApprovals: [], aiUsage: [] };
+    this.sequence = 0;
+    this.persist();
+    return this.state.activePolicy;
+  }
+
   createId(prefix: string) {
     return `${prefix}-${Date.now()}-${++this.sequence}`;
   }
