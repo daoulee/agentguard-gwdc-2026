@@ -125,6 +125,17 @@ const toLocalDateTimeValue = (iso: string) => {
   return local.toISOString().slice(0, 16);
 };
 
+type EnergySummary = {
+  aiInferenceCalls: number;
+  deterministicDecisions: number;
+  measuredTotalTokens: number | null;
+  aiCallsAvoided: number;
+  tokensAvoidedEstimate: number;
+  energySavedWhEstimate: number;
+  reductionRatio: number;
+  assumptions: { tokensPerAiDecision: number; whPer1kTokens: number; note: string };
+};
+
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
   const [policy, setPolicy] = useState<SpendingPolicy | null>(null);
@@ -152,6 +163,7 @@ export function App() {
   const [selectedReceiptId, setSelectedReceiptId] = useState("");
   const [receipt, setReceipt] = useState<{ requestId: string; events: AuditEvent[]; anchors: AnchorRecord[]; integrityValid: boolean } | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsageRecord[]>([]);
+  const [energy, setEnergy] = useState<EnergySummary | null>(null);
   const [integrityValid, setIntegrityValid] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -179,17 +191,19 @@ export function App() {
   }, []);
 
   const refreshActivity = useCallback(async () => {
-    const [approvalPayload, auditPayload, usagePayload, policyPayload, chainPayload] = await Promise.all([
+    const [approvalPayload, auditPayload, usagePayload, policyPayload, chainPayload, energyPayload] = await Promise.all([
       requestJson<{ approvals: PurchaseEvaluation[] }>("/api/approvals"),
       requestJson<{ events: AuditEvent[]; integrityValid: boolean }>("/api/audit"),
       requestJson<{ records: AiUsageRecord[] }>("/api/ai/usage"),
       requestJson<{ policy: SpendingPolicy }>("/api/policy"),
-      requestJson<ChainStatus>("/api/chain/status")
+      requestJson<ChainStatus>("/api/chain/status"),
+      requestJson<EnergySummary>("/api/energy")
     ]);
     setApprovals(approvalPayload.approvals);
     setAuditEvents(auditPayload.events);
     setIntegrityValid(auditPayload.integrityValid);
     setAiUsage(usagePayload.records);
+    setEnergy(energyPayload);
     setPolicy(policyPayload.policy);
     setChainStatus(chainPayload);
   }, []);
@@ -669,6 +683,25 @@ export function App() {
           {auditEvents.length === 0 ? <div className="empty-state"><span>⌁</span><div><strong>기록된 이벤트가 없습니다</strong><p>첫 구매 요청부터 모든 판단 근거가 해시로 연결되어 저장됩니다.</p></div></div> : <div className="audit-table" role="table" aria-label="정책 감사 로그">{auditEvents.map((event) => <div className="audit-row" role="row" key={event.id}><span className={`event-dot event-${event.type}`} /><div><strong>{eventLabels[event.type]}</strong><span>{String(event.details.product ?? event.details.name ?? event.requestId.split("-").slice(-2).join("-"))}</span></div><code title={event.hash}>#{event.hash.slice(0, 8)}</code><time dateTime={event.occurredAt}>{formatTime(event.occurredAt)}</time></div>)}</div>}
           {auditEvents.length > 0 && <div className="anchor-panel"><div><strong>감사 해시 테스트넷 기록</strong><p>최신 해시 #{auditEvents[0]?.hash.slice(0, 16)}… · {chainStatus?.network ?? "네트워크 확인 중"}</p><p>자기 지갑 주소로 0 ETH 거래를 보내고 거래 데이터에 감사 해시를 기록합니다. 테스트넷 가스가 필요합니다.</p></div>{!chainStatus?.configured ? <span>Sepolia RPC 설정 필요</span> : pendingAnchor ? <div className="anchor-actions"><code title={pendingAnchor.transactionHash}>{pendingAnchor.transactionHash.slice(0, 14)}…</code><button disabled={isVerifyingAnchor} onClick={verifyPendingAnchor} type="button">{isVerifyingAnchor ? "검증 중…" : "확정 거래 검증"}</button><button className="anchor-clear" onClick={clearPendingAnchor} title="블록체인 거래는 취소되지 않습니다." type="button">대기 표시 지우기</button></div> : <button disabled={isAnchoring || !integrityValid} onClick={submitAuditAnchor} type="button">{isAnchoring ? "지갑 확인 중…" : "지갑으로 해시 기록"}</button>}</div>}
           {receiptRequestIds.length > 0 && <div className="receipt-panel"><div className="receipt-controls"><div><strong>구매 판단 영수증</strong><p>요청 당시 정책과 이후 판정을 한곳에서 확인합니다.</p></div><select aria-label="영수증 요청 선택" onChange={(event) => { setSelectedReceiptId(event.target.value); setReceipt(null); }} value={selectedReceiptId || receiptRequestIds[0]}>{receiptRequestIds.map((id) => <option key={id} value={id}>{id}</option>)}</select><button onClick={() => loadReceipt(selectedReceiptId || receiptRequestIds[0] || "")} type="button">영수증 보기</button></div>{receipt && <div className="receipt-body">{receiptPolicy ? <p>정책 v{receiptPolicy.version} · 예산 {formatKrw(receiptPolicy.budget)} · 허용 판매자 {receiptPolicy.allowedMerchants.join(", ")} · 카테고리 {receiptPolicy.allowedCategories.join(", ")} · 기한 {formatDeadline(receiptPolicy.deadline)}</p> : <p>이전 기록에는 정책 스냅샷이 없어 허용 범위를 완전히 재구성할 수 없습니다.</p>}<p>요청 총액 {formatKrw(Number(receiptInput?.details.totalAmount ?? 0))} · 기록 검증 {receipt.integrityValid ? "정상" : "실패"}</p><ol>{receipt.events.map((event) => <li key={event.id}>{eventLabels[event.type]} · {formatTime(event.occurredAt)} · #{event.hash.slice(0, 12)}</li>)}</ol><div className="receipt-anchors">{receipt.anchors.length === 0 ? <p>온체인 거래 해시: 아직 연결되지 않음</p> : receipt.anchors.map((anchor) => <p key={anchor.transactionHash}>Sepolia 블록 {anchor.blockNumber} · <a href={`https://sepolia.etherscan.io/tx/${anchor.transactionHash}`} rel="noreferrer" target="_blank">거래 #{anchor.transactionHash.slice(0, 16)}…</a> · 기록 해시 #{anchor.anchoredHash.slice(0, 12)}…</p>)}</div></div>}</div>}
+          {energy && (
+            <div className="energy-panel">
+              <div className="energy-head">
+                <strong>추론 효율 · 에너지 절감 추정</strong>
+                <span className="energy-badge">코드 판정 {energy.deterministicDecisions}건 · AI 추론 {energy.aiInferenceCalls}건</span>
+              </div>
+              <div className="energy-grid">
+                <div><b>{energy.aiCallsAvoided}</b><small>줄인 AI 추론 호출</small></div>
+                <div><b>{energy.tokensAvoidedEstimate.toLocaleString()}</b><small>줄인 토큰(추정)</small></div>
+                <div><b>{energy.energySavedWhEstimate} Wh</b><small>줄인 에너지(추정)</small></div>
+                <div><b>{Math.round(energy.reductionRatio * 100)}%</b><small>추론 절감률</small></div>
+              </div>
+              <p className="energy-note">
+                정책은 AI가 한 번 구조화하고, 이후 지출 판정은 결정론적 코드가 수행합니다. 판정마다 AI를 호출하는 방식 대비 절감치입니다.
+                판정·호출 수는 감사 기록의 실측이며, 토큰·에너지는 공개 문헌 기반 가정({energy.assumptions.tokensPerAiDecision}토큰/판정, {energy.assumptions.whPer1kTokens}Wh/1k토큰)으로 계산한 추정치입니다. NPU 실측이 아닙니다.
+                {energy.measuredTotalTokens != null && <> 실제 보고된 누적 토큰: {energy.measuredTotalTokens.toLocaleString()}.</>}
+              </p>
+            </div>
+          )}
           <div className="usage-panel"><strong>AI 추론 사용량 · 정책 해석 흐름</strong>{aiUsage.length === 0 ? <p>아직 정책 해석 기록이 없습니다.</p> : aiUsage.slice(0, 5).map((record) => <p key={record.id}>{formatTime(record.occurredAt)} · {record.status === "success" ? record.model : record.status === "failed" ? "Kiln 실패 · 안전 규칙 전환" : "Kiln 미설정 · 안전 규칙"} · 입력 {record.promptTokens ?? "측정 안 됨"} / 출력 {record.completionTokens ?? "측정 안 됨"} / 합계 {record.totalTokens ?? "측정 안 됨"} 토큰</p>)}</div>
         </section>
       </main>

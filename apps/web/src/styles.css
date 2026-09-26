@@ -378,3 +378,15 @@ footer p { margin-bottom: 0; color: #8b948f; font-size: 0.72rem; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* 추론 효율 · 에너지 절감 카드 (GWDC Challenge B 에너지 효율 항목) */
+.energy-panel { margin-top: 24px; padding: 18px 20px; border: 1px solid #cfe8d8; border-radius: 14px; background: linear-gradient(180deg, #f2fbf5, #f7faf8); }
+.energy-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.energy-head strong { font-size: 0.82rem; }
+.energy-badge { padding: 4px 10px; border-radius: 999px; background: #e2f4e9; color: #1c7a48; font-size: 0.66rem; font-weight: 750; }
+.energy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+.energy-grid > div { padding: 12px; border: 1px solid #dcece2; border-radius: 10px; background: #fff; text-align: center; }
+.energy-grid b { display: block; color: #14663a; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+.energy-grid small { display: block; margin-top: 4px; color: #6a776f; font-size: 0.64rem; }
+.energy-note { margin: 14px 0 0; color: #66736b; font-size: 0.68rem; line-height: 1.55; }
+@media (max-width: 560px) { .energy-grid { grid-template-columns: repeat(2, 1fr); } }

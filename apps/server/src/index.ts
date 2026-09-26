@@ -13,6 +13,7 @@ import {
 import { getAiStatus, interpretPolicy } from "./ai.js";
 import { ChainVerificationError, createAnchorData, getChainStatus, verifyAnchorTransaction } from "./chain.js";
 import { DemoStore } from "./store.js";
+import { summarizeEnergy } from "./energy.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8787);
@@ -59,6 +60,9 @@ app.get("/api/health", (_request, response) => {
 
 app.get("/api/ai/status", (_request, response) => response.json(getAiStatus()));
 app.get("/api/ai/usage", (_request, response) => response.json({ records: store.getAiUsage() }));
+app.get("/api/energy", (_request, response) =>
+  response.json(summarizeEnergy(store.getAuditEvents(), store.getAiUsage()))
+);
 app.get("/api/products", (_request, response) => response.json({ products: mockProducts }));
 app.get("/api/policy", (_request, response) => response.json({ policy: store.getPolicy() }));
 app.get("/api/audit", (_request, response) => {
