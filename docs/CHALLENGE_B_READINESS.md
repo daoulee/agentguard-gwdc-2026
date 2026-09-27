@@ -17,8 +17,8 @@ AgentGuard는 사용자가 위임한 구매 예산·판매자·상품·기한을
 
 ## API와 측정
 
-1. 행사에서 받은 Kiln URL과 키를 `.env`에 입력한다. 모델은 반드시 `Qwen3-32B`로 유지한다.
-2. 정책 해석을 한 번 실행하고 `GET /api/ai/usage`에서 `status=success`, `provider=kiln`, `model=Qwen3-32B`를 확인한다. `promptTokens`, `completionTokens`, `totalTokens`는 공급자 응답에 값이 있을 때만 기록된다. 값이 없으면 측정 안 됨으로 남긴다.
+1. 행사에서 받은 Kiln URL과 키를 `.env`에 입력한다. 모델은 Qwen3-32B(Kiln ID `qwen3-32b`)로 유지하고 `scripts/check-kiln.mjs`로 `/models` 목록과 일치하는지 확인한다.
+2. 정책 해석을 한 번 실행하고 `GET /api/ai/usage`에서 `status=success`, `provider=kiln`, `model=qwen3-32b`를 확인한다. `promptTokens`, `completionTokens`, `totalTokens`는 공급자 응답에 값이 있을 때만 기록된다. 값이 없으면 측정 안 됨으로 남긴다.
 3. 거래 평가·승인·차단은 LLM을 재호출하지 않는다. 발표 시 이 구분을 불필요한 추론 절감 근거로 설명한다.
 4. 에너지 추정은 실측 자료가 있을 때 `추론 에너지 = 요청별 NPU 평균 전력(W) × 추론 시간(s) / 3600` Wh로 계산한다. 전력과 시간을 측정하지 못하면 수치를 만들어내지 않고 가정값과 출처를 별도 표시한다.
 

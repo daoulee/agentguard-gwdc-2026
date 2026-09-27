@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { merchantDirectory, mockProducts } from "@agentguard/shared";
-import { interpretPolicy } from "./ai.js";
+import { extractModelJson, interpretPolicy } from "./ai.js";
 
 const trustedMerchants = new Set(merchantDirectory.filter((merchant) => merchant.trusted).map((merchant) => merchant.name));
 const trustedProducts = mockProducts.filter((product) => trustedMerchants.has(product.merchant));
@@ -83,7 +83,7 @@ test("Kiln 응답이 누락 조건을 숨겨도 확인을 요구하고 실제 �
   };
   try {
     const result = await interpretPolicy(prompt, trustedProducts);
-    assert.equal(requestedModel, "Qwen3-32B");
+    assert.equal(requestedModel, "qwen3-32b");
     assert.equal(result.draft.provider, "kiln");
     assert.equal(result.draft.name, "게이밍 모니터 구매 위임");
     assert.deepEqual(result.draft.allowedCategories, ["gaming_monitor"]);
@@ -125,6 +125,41 @@ test("규칙이 모르는 상품 표현은 Kiln이 카탈로그 후보를 채우
     assert.deepEqual(result.draft.allowedMerchants, ["DisplayHub"]);
     assert.ok(result.draft.missingFields.includes("allowedCategories"));
     assert.ok(result.draft.missingFields.includes("allowedMerchants"));
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.KILN_API_URL;
+    else process.env.KILN_API_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.KILN_API_KEY;
+    else process.env.KILN_API_KEY = previousKey;
+  }
+});
+
+test("Qwen3 추론 블록과 코드 펜스를 걷어내고 JSON만 해석한다", async () => {
+  assert.deepEqual(extractModelJson('<think>\n예산은 {30만원}\n</think>\n```json\n{"budget": 300000}\n```'), { budget: 300000 });
+  assert.deepEqual(extractModelJson('정책입니다: {"budget": 1} 끝'), { budget: 1 });
+  assert.throws(() => extractModelJson("<think>끝나지 않은 추론 {\"budget\": 1}"), /kiln_unterminated_thinking/);
+  assert.throws(() => extractModelJson("JSON 없음"), /kiln_no_json_object/);
+
+  const previousUrl = process.env.KILN_API_URL;
+  const previousKey = process.env.KILN_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.KILN_API_URL = "https://kiln.example/v1";
+  process.env.KILN_API_KEY = "test-key";
+  let sentUserMessage = "";
+  globalThis.fetch = async (_input, init) => {
+    sentUserMessage = (JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> }).messages.at(-1)?.content ?? "";
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: `<think>카탈로그를 확인한다</think>\n${JSON.stringify({ budget: 300000, allowedCategories: ["gaming_monitor"], allowedMerchants: ["DisplayHub"] })}` } }],
+      usage: { prompt_tokens: 120, completion_tokens: 40, total_tokens: 160 }
+    }));
+  };
+  try {
+    const result = await interpretPolicy(prompt, trustedProducts);
+    assert.equal(result.usage.provider, "kiln");
+    assert.equal(result.usage.status, "success");
+    assert.equal(result.usage.totalTokens, 160);
+    assert.equal(result.draft.sourceText, prompt);
+    assert.ok(sentUserMessage.endsWith("/no_think"));
   } finally {
     globalThis.fetch = previousFetch;
     if (previousUrl === undefined) delete process.env.KILN_API_URL;

@@ -19,7 +19,7 @@ type UsageResult = Omit<AiUsageRecord, "id" | "occurredAt">;
 const getConfiguration = () => ({
   apiUrl: process.env.KILN_API_URL?.trim() ?? "",
   apiKey: process.env.KILN_API_KEY?.trim() ?? "",
-  model: process.env.KILN_MODEL?.trim() || "Qwen3-32B"
+  model: process.env.KILN_MODEL?.trim() || "qwen3-32b"
 });
 
 export function getAiStatus(): AiStatusResponse {
@@ -36,6 +36,22 @@ const stripCodeFence = (content: string) => content
   .replace(/^```(?:json)?\s*/i, "")
   .replace(/\s*```$/, "")
   .trim();
+
+// Qwen3 may prepend a <think> block; keep only the outermost JSON object.
+export const extractModelJson = (content: string): unknown => {
+  const withoutThinking = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  if (/<think>/i.test(withoutThinking)) throw new Error("kiln_unterminated_thinking");
+  const text = stripCodeFence(withoutThinking.trim());
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end < start) throw new Error("kiln_no_json_object");
+  return JSON.parse(text.slice(start, end + 1));
+};
+
+const kilnTimeoutMs = () => {
+  const value = Number(process.env.KILN_TIMEOUT_MS);
+  return Number.isInteger(value) && value >= 1_000 && value <= 120_000 ? value : 20_000;
+};
 
 const missingFieldNames: PolicyMissingField[] = [
   "budget",
@@ -181,21 +197,23 @@ async function interpretWithKiln(prompt: string, products: Product[]) {
           role: "system",
           content: `You convert Korean spending instructions into grounded spending-policy JSON. Today is ${today}. Catalog: ${JSON.stringify(catalog)}. Return only JSON with name, budget, autoApprovalLimit, allowedMerchants, allowedCategories, deadline (ISO 8601), requireHumanApproval, warnings, missingFields, clarifyingQuestions, fieldSources. missingFields may contain only budget, autoApprovalLimit, allowedMerchants, allowedCategories, deadline. fieldSources may use user, catalog, ai, safe_default, needs_confirmation. Never invent a merchant or category outside the catalog. Never infer an auto-approval amount or deadline that the user did not specify: use a conservative temporary value, add the field to missingFields, and ask one concise Korean clarifying question. Distinguish gaming monitors from keyboards and ground category and merchants in the catalog.`
         },
-        { role: "user", content: prompt }
+        // "/no_think" is Qwen3's soft switch to skip the reasoning block.
+        { role: "user", content: `${prompt}\n/no_think` }
       ]
     }),
-    signal: AbortSignal.timeout(8_000)
+    signal: AbortSignal.timeout(kilnTimeoutMs())
   });
 
   if (!response.ok) throw new Error(`kiln_http_${response.status}`);
   const payload = await response.json() as KilnResponse;
   const content = payload.choices?.[0]?.message?.content;
   if (!content) throw new Error("kiln_empty_response");
+  const parsed = extractModelJson(content);
   const tokens = payload.usage;
   const validTokens = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
   return {
-    draft: toDraft(JSON.parse(stripCodeFence(content)), prompt, products),
-    modelCandidate: Object.fromEntries(Object.entries(JSON.parse(stripCodeFence(content)) as Record<string, unknown>).filter(([key]) => ["name", "budget", "autoApprovalLimit", "allowedMerchants", "allowedCategories", "deadline", "requireHumanApproval", "missingFields"].includes(key))),
+    draft: toDraft(parsed, prompt, products),
+    modelCandidate: Object.fromEntries(Object.entries(parsed as Record<string, unknown>).filter(([key]) => ["name", "budget", "autoApprovalLimit", "allowedMerchants", "allowedCategories", "deadline", "requireHumanApproval", "missingFields"].includes(key))),
     usage: {
       promptTokens: validTokens(tokens?.prompt_tokens),
       completionTokens: validTokens(tokens?.completion_tokens),
@@ -217,7 +235,9 @@ export async function interpretPolicy(prompt: string, products: Product[]) {
         processingMs: elapsed(),
         usage: { flow: "policy_interpretation", provider: "kiln", model: status.model, status: "success", processingMs: elapsed(), ...result.usage } as UsageResult
       };
-    } catch {
+    } catch (error) {
+      // Log the reason only (never the key or raw response) so on-site failures are diagnosable.
+      console.warn(`[kiln] fallback: ${error instanceof Error ? error.name + ": " + error.message.slice(0, 160) : "unknown"}`);
       const fallback = createFallbackPolicyDraft(prompt, { availableProducts: products });
       fallback.warnings.unshift("Kiln 응답을 사용할 수 없어 안전 규칙 변환기로 처리했습니다.");
       return { draft: fallback, modelCandidate: null, processingMs: elapsed(), usage: { ...emptyUsage(status.model, "failed"), processingMs: elapsed() } };

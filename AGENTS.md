@@ -11,7 +11,7 @@
 ## 헌법 — 절대 어기면 안 되는 것 (9조)
 
 1. **역할 경계.** AI(Qwen)는 자연어를 **정책 초안으로만** 만든다. **지출 판정은 결정론적 코드**(`packages/policy`)가, **승인은 사람**이 한다. AI가 최종 지출을 승인하거나 규칙을 우회하게 만들지 마라. 이 경계가 제품의 정체성이다.
-2. **모델은 `Qwen3-32B`.** `gpt-oss-120b`는 폐기됨(tool calling 부적합, 공지 정정). 임의로 다른 모델로 바꾸지 마라. 실제 식별자는 현장 Kiln `/models`로 확인해 맞춘다.
+2. **모델은 `Qwen3-32B`.** `gpt-oss-120b`는 폐기됨(tool calling 부적합, 공지 정정). 임의로 다른 모델로 바꾸지 마라. Kiln 문서상 ID는 `qwen3-32b`(소문자). 현장에서 `scripts/check-kiln.mjs`로 `/models`를 조회해 맞춘다.
 3. **키·비밀값 금지.** API 키·개인키·시드구문을 **코드·커밋·로그·발표자료·fixture에 절대** 남기지 마라. `KILN_API_KEY`는 서버 환경변수(`.env`)에만 두고 브라우저(`VITE_`)엔 넣지 마라. `.env`는 커밋하지 않는다.
 4. **거짓 완료 금지.** 실제 API 호출 없이 "AI 연동 완료", 실제 거래(receipt) 없이 "결제 성공"이라 하지 마라. **실제 연결 / Mock / 미검증**을 항상 구분해 표기하라.
 5. **안전 단계 생략 금지.** 사람 승인, 실행 직전 재검사(정책·중지·승인), 중복 실행 방지를 빼지 마라.
@@ -25,7 +25,7 @@
 ## 완료 기준 (이걸 통과해야 "됐다")
 
 ```bash
-npm test        # 전체 22개 통과 유지 (기능 추가 시 테스트도 추가)
+npm test        # 전체 31개 통과 유지(서버 19·정책 12) (기능 추가 시 테스트도 추가)
 npm run typecheck   # 무결점
 npm run build       # 성공
 ```
@@ -78,15 +78,21 @@ Kiln 키·지갑 없이도 **Safe fallback**으로 3종 데모가 돈다. 실제
 
 ---
 
-## 3종 데모 시나리오 (정책=키보드 기본값 기준)
+## 데모 시나리오
+
+**본 데모 = 게이밍 모니터 8단계** (`docs/ARCHITECTURE_AND_DEMO.md` 리허설 표). 자동 검증: `node --env-file=.env scripts/rehearse-demo.mjs --reset`.
+
+**백업 = 키보드 기본 정책 3종** (초기화 직후 **미등록 판매자 → 예산 초과 → 정상** 순서로 실행)
 
 | 상품 ID | 기대 판정 |
 | --- | --- |
 | `keyboard-safe` | ✅ allow (정상 승인) |
-| `keyboard-over-budget` | ⛔ block · budget_exceeded (수수료 포함 초과) |
+| `keyboard-over-budget` + 수수료 5,000 | ⛔ block · budget_exceeded (수수료 포함 초과. 수수료 0이면 승인 대기) |
 | `keyboard-unknown-merchant` | ⛔ block · merchant_not_allowed (미등록 판매자) |
 
-데모 전 `POST /api/demo/reset` 필수(누적 지출이 쌓이면 정상 케이스가 예산에 막힘).
+데모 전 `POST /api/demo/reset` 필수. 정상(82,000원)을 먼저 실행하면 이후 요청에 `budget_exceeded`가 섞여 차단 이유 설명이 흐려진다.
+
+**현장 점검 스크립트:** `scripts/check-kiln.mjs`(모델 ID·토큰·think 블록), `scripts/check-chain.mjs [주소]`(Sepolia RPC·잔액, 읽기 전용), `scripts/rehearse-demo.mjs --reset`(8단계).
 
 ---
 

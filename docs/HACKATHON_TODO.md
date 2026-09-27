@@ -61,18 +61,20 @@
 ```env
 KILN_API_URL=행사에서_받은_API_URL
 KILN_API_KEY=행사에서_받은_API_KEY
-KILN_MODEL=Qwen3-32B
+KILN_MODEL=qwen3-32b
+KILN_TIMEOUT_MS=20000
 ```
 
+- [ ] `node --env-file=.env scripts/check-kiln.mjs` → `/models`에 모델 ID 존재, chat 응답·usage·지연시간 확인 (실패 시 KILN_MODEL·URL 수정)
 - [ ] API 키가 로그·스크린샷·Git에 노출되지 않았는지 확인
 - [ ] 서버 재시작
 
 ```bash
-cd "/Users/daoule/Documents/Codex/2026-09-16/new-chat/agentguard"
+cd ~/Desktop/AgentGuard
 npm run dev
 ```
 
-- [ ] 화면 표시가 `Safe fallback parser`에서 `Kiln · Qwen3-32B`로 바뀌는지 확인
+- [ ] 화면 표시가 `Safe fallback parser`에서 Kiln 표기로 바뀌는지 확인 (계속 fallback이면 서버 콘솔의 `[kiln] fallback:` 원인 확인)
 - [ ] 게이밍 모니터 예문으로 정책 초안을 생성
 - [ ] 카테고리와 판매자가 올바른 칸에 입력되는지 확인
 - [ ] 자동 승인 한도와 기한이 확인 질문으로 남는지 확인
@@ -90,6 +92,7 @@ RPC_URL=사용할_SEPOLIA_RPC_URL
 CHAIN_ID=11155111
 ```
 
+- [ ] `node --env-file=.env scripts/check-chain.mjs <지갑주소>` → chainId 11155111·잔액 확인
 - [ ] 브라우저 지갑을 Sepolia로 전환
 - [ ] 지갑에 테스트 ETH 준비
 - [ ] 승인·차단 감사 기록 생성
@@ -163,6 +166,7 @@ CHAIN_ID=11155111
 
 ### 데모 피칭 전달력
 
+- [ ] 발표 직전 `node --env-file=.env scripts/rehearse-demo.mjs --reset` 전 단계 ✔ 확인 후 화면에서 다시 초기화
 - [ ] 3분 발표를 최소 3회 리허설
 - [ ] 한 명은 발표, 한 명은 조작, 한 명은 장애 대응
 - [ ] 인터넷 또는 API 실패 시 사용할 캡처와 폴백 데모 준비

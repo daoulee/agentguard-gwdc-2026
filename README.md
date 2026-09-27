@@ -83,7 +83,7 @@ npm run dev
 - 웹: <http://localhost:5173>
 - 서버 상태 확인: <http://localhost:8787/api/health>
 
-Kiln 연동 없이도 로컬 데모가 작동합니다. 제공받은 OpenAI 호환 Kiln API가 있다면 `.env`의 `KILN_API_URL`, `KILN_API_KEY`를 설정하고 `KILN_MODEL=Qwen3-32B`를 유지합니다. `GET /api/ai/usage`에서 실제 응답의 토큰 사용량을 확인할 수 있습니다. 비밀키는 절대 커밋하지 않습니다.
+Kiln 연동 없이도 로컬 데모가 작동합니다. 제공받은 OpenAI 호환 Kiln API가 있다면 `.env`의 `KILN_API_URL`, `KILN_API_KEY`를 설정하고 `KILN_MODEL=qwen3-32b`(Kiln 문서 기준 ID)를 사용합니다. 연결 점검은 `node --env-file=.env scripts/check-kiln.mjs`로 합니다. `GET /api/ai/usage`에서 실제 응답의 토큰 사용량을 확인할 수 있습니다. 비밀키는 절대 커밋하지 않습니다.
 
 게이밍 모니터 문장을 입력한 뒤 **정책 초안 만들기**를 눌러 새 해석 결과를 확인합니다. 입력을 바꾸면 이전 초안을 지우고 진행 중인 해석 요청을 취소합니다. Kiln이 문장에 명시된 상품 종류와 다른 카테고리를 제시하더라도 카탈로그와 코드의 명시적 추출 결과가 우선합니다. 규칙으로 식별하지 못한 상품은 Kiln이 카탈로그 후보를 채울 수 있지만 사용자가 확인해야 적용됩니다.
 
