@@ -7,6 +7,37 @@ const trustedMerchants = new Set(merchantDirectory.filter((merchant) => merchant
 const trustedProducts = mockProducts.filter((product) => trustedMerchants.has(product.merchant));
 const prompt = "승인된 판매자에서 게이밍 모니터를 30만원 이내로 구매해.";
 
+test("AI 금액 충돌은 명시적 예산을 확대하지 않고 확인 대상으로 남긴다", async () => {
+  const previousUrl = process.env.KILN_API_URL;
+  const previousKey = process.env.KILN_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.KILN_API_URL = "https://kiln.example/v1";
+  process.env.KILN_API_KEY = "test-key";
+  globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+    budget: 200000, autoApprovalLimit: 150000, missingFields: []
+  }) } }] }));
+  try {
+    const result = await interpretPolicy("승인된 판매자에서 오늘 10만원 이하 키보드를 구매하고 9만원 넘으면 승인 받아.", trustedProducts);
+    assert.equal(result.draft.budget, 100000);
+    assert.equal(result.draft.autoApprovalLimit, 90000);
+    assert.ok(result.draft.missingFields.includes("budget"));
+    assert.ok(result.draft.missingFields.includes("autoApprovalLimit"));
+    assert.equal(result.modelCandidate?.budget, 200000);
+    assert.ok(result.processingMs >= 0);
+    globalThis.fetch = async () => new Response('{invalid json');
+    const failed = await interpretPolicy(prompt, trustedProducts);
+    assert.equal(failed.usage.status, "failed");
+    assert.equal(failed.draft.provider, "safe_fallback");
+    assert.equal(failed.usage.totalTokens, null);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.KILN_API_URL;
+    else process.env.KILN_API_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.KILN_API_KEY;
+    else process.env.KILN_API_KEY = previousKey;
+  }
+});
+
 test("Kiln 미설정 시 토큰 사용량을 추측하지 않는다", async () => {
   const previousUrl = process.env.KILN_API_URL;
   const previousKey = process.env.KILN_API_KEY;

@@ -6,13 +6,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:8787"
+      "/api": process.env.AGENTGUARD_API_TARGET || "http://localhost:8787"
     }
   },
   preview: {
     allowedHosts: [".trycloudflare.com"],
     proxy: {
-      "/api": "http://localhost:8787"
+      "/api": process.env.AGENTGUARD_API_TARGET || "http://localhost:8787"
     }
   }
 });

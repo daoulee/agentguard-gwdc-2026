@@ -64,6 +64,9 @@ export type PurchaseRequest = {
   merchant: string;
   category: string;
   requestedAt: string;
+  source?: "simulator" | "agent";
+  agentId?: string;
+  clientRequestId?: string;
 };
 
 export type DecisionReason =
@@ -86,6 +89,8 @@ export type AuditEvent = {
   id: string;
   requestId: string;
   type:
+    | "policy_interpreted"
+    | "policy_reviewed"
     | "policy_created"
     | "request_received"
     | "allowed"
@@ -106,6 +111,7 @@ export type PurchaseEvaluation = {
   product: Product;
   request: PurchaseRequest;
   decision: PolicyDecision;
+  processingMs?: number;
 };
 
 export type HealthResponse = {
@@ -130,6 +136,7 @@ export type AiUsageRecord = {
   completionTokens: number | null;
   totalTokens: number | null;
   occurredAt: string;
+  processingMs?: number;
 };
 
 export const mockProducts: Product[] = [

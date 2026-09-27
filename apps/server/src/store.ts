@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AiUsageRecord, AuditEvent, PolicyDraft, PurchaseEvaluation, SpendingPolicy } from "@agentguard/shared";
 
@@ -9,6 +9,7 @@ type StoredState = {
   auditEvents: AuditEvent[];
   pendingApprovals: PurchaseEvaluation[];
   aiUsage: AiUsageRecord[];
+  processedRequests?: Record<string, { fingerprint: string; evaluation: PurchaseEvaluation }>;
 };
 
 const defaultStateFilePath = fileURLToPath(new URL("../data/state.json", import.meta.url));
@@ -39,8 +40,9 @@ const hashEvent = (event: Omit<AuditEvent, "hash">) => createHash("sha256")
 export class DemoStore {
   private state: StoredState;
   private sequence = 0;
+  private transactionDepth = 0;
 
-  constructor(private readonly stateFilePath = defaultStateFilePath) {
+  constructor(private readonly stateFilePath = process.env.AGENTGUARD_STATE_FILE ? resolve(process.env.AGENTGUARD_STATE_FILE) : defaultStateFilePath) {
     this.state = this.load();
     if (!this.verifyAuditChain()) this.state.activePolicy.status = "stopped";
   }
@@ -78,7 +80,24 @@ export class DemoStore {
     }
   }
 
+  transaction<T>(operation: () => T): T {
+    if (this.transactionDepth) return operation();
+    const previous = structuredClone(this.state);
+    this.transactionDepth++;
+    try {
+      const result = operation();
+      this.transactionDepth--;
+      this.persist();
+      return result;
+    } catch (error) {
+      this.transactionDepth = 0;
+      this.state = previous;
+      throw error;
+    }
+  }
+
   private persist() {
+    if (this.transactionDepth) return;
     mkdirSync(dirname(this.stateFilePath), { recursive: true });
     const temporaryPath = `${this.stateFilePath}.tmp`;
     writeFileSync(temporaryPath, JSON.stringify(this.state, null, 2));
@@ -101,7 +120,11 @@ export class DemoStore {
     return this.state.activePolicy;
   }
 
-  setPolicy(draft: PolicyDraft) {
+  setPolicy(draft: PolicyDraft, review?: { initialDraft: PolicyDraft; interpretationId: string; actor: string; processingMs: number }) {
+    return this.transaction(() => this.applyPolicy(draft, review));
+  }
+
+  private applyPolicy(draft: PolicyDraft, review?: { initialDraft: PolicyDraft; interpretationId: string; actor: string; processingMs: number }) {
     for (const pending of this.state.pendingApprovals) {
       this.recordAudit(pending.request.id, "rejected", {
         product: pending.product.name,
@@ -131,7 +154,13 @@ export class DemoStore {
     };
 
     this.state.activePolicy = policy;
+    if (review) {
+      const changes = Object.keys(draft).filter(key => JSON.stringify(draft[key as keyof PolicyDraft]) !== JSON.stringify(review.initialDraft[key as keyof PolicyDraft]));
+      this.recordAudit(policy.id, "policy_reviewed", { ...review, finalDraft: draft, changedFields: changes });
+    }
     this.recordAudit(policy.id, "policy_created", {
+      policySnapshot: structuredClone(policy),
+      actor: review?.actor ?? "demo_operator",
       name: policy.name,
       version: policy.version,
       provider: policy.interpretationProvider,
@@ -188,6 +217,16 @@ export class DemoStore {
     return event;
   }
 
+  getProcessedRequest(key: string) {
+    return this.state.processedRequests?.[key];
+  }
+
+  rememberRequest(key: string, fingerprint: string, evaluation: PurchaseEvaluation) {
+    this.state.processedRequests ??= {};
+    this.state.processedRequests[key] = { fingerprint, evaluation };
+    this.persist();
+  }
+
   getPendingApprovals() {
     return this.state.pendingApprovals;
   }
@@ -214,13 +253,17 @@ export class DemoStore {
     return pending;
   }
 
-  stopDelegation() {
+  stopDelegation(actor = "demo_operator") {
+    return this.transaction(() => this.stop(actor));
+  }
+
+  private stop(actor: string) {
     if (this.state.activePolicy.status === "stopped") return this.state.activePolicy;
     for (const pending of this.state.pendingApprovals) {
       this.recordAudit(pending.request.id, "rejected", {
         product: pending.product.name,
         reason: "delegation_stopped",
-        actor: "human_operator"
+        actor
       });
     }
     this.state.pendingApprovals = [];
@@ -230,7 +273,7 @@ export class DemoStore {
       policyId: this.state.activePolicy.id,
       version: this.state.activePolicy.version,
       spentKrw: this.state.activePolicy.spentKrw,
-      actor: "human_operator"
+      actor
     });
     return this.state.activePolicy;
   }

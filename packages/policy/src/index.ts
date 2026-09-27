@@ -52,25 +52,32 @@ type FallbackOptions = {
   provider?: PolicyInterpretationProvider;
 };
 
-const moneyPattern = /(\d+(?:\.\d+)?)\s*(만원|만|천원|천|원)/g;
-
-const toKrw = (value: string, unit: string) => {
-  const amount = Number(value);
-  if (unit === "만원" || unit === "만") return Math.round(amount * 10_000);
-  if (unit === "천원" || unit === "천") return Math.round(amount * 1_000);
-  return Math.round(amount);
-};
-
-const extractAmounts = (prompt: string) => {
-  const compoundAmounts: number[] = [];
-  const withoutCompounds = prompt.replace(/(\d+)\s*만\s*(\d+)\s*천원?/g, (_match, tenThousands: string, thousands: string) => {
-    compoundAmounts.push(Number(tenThousands) * 10_000 + Number(thousands) * 1_000);
-    return " ";
+// Keep the phrase around each amount; magnitude does not establish its role.
+export function extractSpendingAmounts(prompt: string) {
+  const pattern = /(\d+(?:\.\d+)?)\s*(만원|만|천원|천|원)(?:\s*(\d+)\s*천원?)?/g;
+  const entries = [...prompt.matchAll(pattern)].map((match) => {
+    const unit = match[2]!;
+    const multiplier = unit.startsWith("만") ? 10_000 : unit.startsWith("천") ? 1_000 : 1;
+    return { amount: Math.round(Number(match[1]) * multiplier) + Number(match[3] ?? 0) * 1_000,
+      start: match.index!, end: match.index! + match[0].length };
   });
-  const simpleAmounts = [...withoutCompounds.matchAll(moneyPattern)]
-    .map((match) => toKrw(match[1] ?? "0", match[2] ?? "원"));
-  return [...compoundAmounts, ...simpleAmounts].filter((amount) => amount > 0);
-};
+  const budgets: number[] = [];
+  const approvals: number[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const before = prompt.slice(index ? entries[index - 1]!.end : 0, entry.start);
+    const after = prompt.slice(entry.end, entries[index + 1]?.start ?? prompt.length);
+    const prefix = before.split(/[,。.!?]|하고|그리고/).at(-1) ?? "";
+    const suffix = after.split(/[,。.!?]|하고|그리고/)[0] ?? "";
+    const approval = /(?:넘|초과|이상)[\s\S]*(?:승인|확인|허락)/.test(suffix)
+      || /(?:자동\s*승인\s*(?:한도|기준)|승인\s*(?:기준|한도))[^\d]*$/.test(prefix)
+      || /(?:이하|이내|까지)[\s\S]*자동\s*승인/.test(suffix);
+    if (approval) approvals.push(entry.amount);
+    else if (/(?:예산|최대|총액|한도)[^\d]*$/.test(prefix)
+      || /^(?:\s*(?:이하|이내|안으로|안에서|내에서|내로|까지|미만))/.test(suffix)) budgets.push(entry.amount);
+  }
+  const unique = (values: number[]) => [...new Set(values.filter(value => value > 0))];
+  return { budgets: unique(budgets), approvals: unique(approvals) };
+}
 
 const addDays = (date: Date, days: number) => {
   const result = new Date(date);
@@ -80,10 +87,20 @@ const addDays = (date: Date, days: number) => {
 };
 
 const inferDeadline = (prompt: string, now: Date) => {
+  const calendar = prompt.match(/(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*까지/);
+  if (calendar) {
+    const year = Number(calendar[1] ?? now.getFullYear());
+    const month = Number(calendar[2]);
+    const day = Number(calendar[3]);
+    const date = new Date(year, month - 1, day, 23, 59, 59, 999);
+    if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) return date.toISOString();
+    return null;
+  }
   if (/내일/.test(prompt)) return addDays(now, 1).toISOString();
   const dayMatch = prompt.match(/(\d+)\s*일\s*(?:안|이내)/);
   if (dayMatch?.[1]) return addDays(now, Number(dayMatch[1])).toISOString();
-  return addDays(now, 0).toISOString();
+  if (/오늘/.test(prompt)) return addDays(now, 0).toISOString();
+  return null;
 };
 
 const inferCategories = (prompt: string) => {
@@ -110,13 +127,14 @@ const categoryNames: Record<string, string> = {
 export function createFallbackPolicyDraft(prompt: string, options: FallbackOptions): PolicyDraft {
   const normalized = prompt.trim();
   const now = options.now ?? new Date();
-  const amounts = extractAmounts(normalized).sort((left, right) => right - left);
-  const budget = amounts[0] ?? 100_000;
-  const approvalCandidate = amounts.find((amount) => amount < budget);
+  const amounts = extractSpendingAmounts(normalized);
+  const budget = amounts.budgets.length === 1 ? amounts.budgets[0]! : 100_000;
+  const approvalCandidate = amounts.approvals.length === 1 ? amounts.approvals[0] : undefined;
   const approvalInstruction = normalized.replace(/승인된\s*판매자/g, "");
   const mentionsApproval = /승인|확인|허락/.test(approvalInstruction);
-  const mentionsAutomatic = /자동(?:으로|\s*구매|\s*승인)?/.test(normalized);
-  const autoApprovalLimit = approvalCandidate ?? (mentionsAutomatic ? budget : 0);
+  const mentionsAutomatic = /자동/.test(normalized) && !mentionsApproval;
+  const conflictingApproval = approvalCandidate !== undefined && approvalCandidate > budget;
+  const autoApprovalLimit = conflictingApproval ? 0 : approvalCandidate ?? (mentionsAutomatic ? budget : 0);
   const allMerchants = [...new Set(options.availableProducts.map((product) => product.merchant))];
   const explicitlyNamedMerchants = allMerchants.filter((merchant) =>
     normalized.toLowerCase().includes(merchant.toLowerCase())
@@ -132,17 +150,18 @@ export function createFallbackPolicyDraft(prompt: string, options: FallbackOptio
   const warnings: string[] = [];
   const missingFields: PolicyDraft["missingFields"] = [];
   const clarifyingQuestions: string[] = [];
-  const hasDeadline = /오늘|내일|\d+\s*일\s*(?:안|이내)/.test(normalized);
+  const parsedDeadline = inferDeadline(normalized, now);
+  const hasDeadline = parsedDeadline !== null && new Date(parsedDeadline).getTime() > now.getTime();
   const hasApprovedMerchantIntent = /승인된 판매자|허용된 판매자|등록된 판매자/.test(normalized);
 
-  if (amounts.length === 0) {
+  if (amounts.budgets.length !== 1) {
     missingFields.push("budget");
-    warnings.push("금액을 찾지 못해 임시 예산 100,000원을 표시했습니다.");
+    warnings.push("예산 조건이 없거나 서로 달라 임시 예산 100,000원을 표시했습니다. 최종 한도를 확인해주세요.");
     clarifyingQuestions.push("최대 구매 예산을 얼마로 설정할까요?");
   }
-  if (!mentionsApproval && !mentionsAutomatic) {
+  if ((!mentionsApproval && !mentionsAutomatic) || amounts.approvals.length > 1 || conflictingApproval) {
     missingFields.push("autoApprovalLimit");
-    warnings.push("자동 승인 기준을 추측하지 않고 모든 거래를 사용자 승인 대상으로 두었습니다.");
+    warnings.push(conflictingApproval ? "승인 기준이 최대 예산보다 큽니다. 예산을 늘리지 않고 승인 기준의 확인을 요구합니다." : "자동 승인 기준을 추측하지 않고 모든 거래를 사용자 승인 대상으로 두었습니다.");
     clarifyingQuestions.push("얼마까지 자동 승인하고, 그 이상은 직접 확인할까요?");
   }
   if (allowedCategories.includes("general")) {
@@ -156,8 +175,8 @@ export function createFallbackPolicyDraft(prompt: string, options: FallbackOptio
   }
   if (!hasDeadline) {
     missingFields.push("deadline");
-    warnings.push("구매 기한을 추측하지 않고 오늘 23:59를 임시 표시했습니다.");
-    clarifyingQuestions.push("이 정책은 언제까지 유효해야 하나요?");
+    warnings.push(parsedDeadline ? "입력한 구매 기한이 이미 지났습니다. 미래 기한을 지정해주세요." : "구매 기한이 없거나 유효하지 않아 오늘 23:59를 임시 표시했습니다.");
+    clarifyingQuestions.push(parsedDeadline ? "입력한 기한이 지났습니다. 언제까지 구매하도록 할까요?" : "이 정책은 언제까지 유효해야 하나요?");
   }
 
   return {
@@ -168,7 +187,7 @@ export function createFallbackPolicyDraft(prompt: string, options: FallbackOptio
     currency: "KRW",
     allowedMerchants,
     allowedCategories,
-    deadline: inferDeadline(normalized, now),
+    deadline: parsedDeadline ?? addDays(now, 0).toISOString(),
     requireHumanApproval: !mentionsAutomatic || mentionsApproval || autoApprovalLimit < budget,
     provider: options.provider ?? "safe_fallback",
     warnings,
@@ -176,8 +195,8 @@ export function createFallbackPolicyDraft(prompt: string, options: FallbackOptio
     clarifyingQuestions,
     fieldSources: {
       name: "safe_default",
-      budget: amounts.length > 0 ? "user" : "needs_confirmation",
-      autoApprovalLimit: mentionsApproval || mentionsAutomatic ? "user" : "needs_confirmation",
+      budget: amounts.budgets.length === 1 ? "user" : "needs_confirmation",
+      autoApprovalLimit: missingFields.includes("autoApprovalLimit") ? "needs_confirmation" : "user",
       allowedMerchants: explicitlyNamedMerchants.length > 0 ? "user" : hasApprovedMerchantIntent ? "catalog" : "needs_confirmation",
       allowedCategories: allowedCategories.includes("general") ? "needs_confirmation" : "user",
       deadline: hasDeadline ? "user" : "needs_confirmation"
@@ -189,8 +208,8 @@ export function validatePolicyDraft(draft: PolicyDraft, options: { allowIncomple
   const errors: string[] = [];
   if (!draft.name.trim()) errors.push("정책 이름이 필요합니다.");
   if (!draft.sourceText.trim()) errors.push("정책 원문이 필요합니다.");
-  if (!Number.isFinite(draft.budget) || draft.budget <= 0) errors.push("최대 예산은 0보다 커야 합니다.");
-  if (!Number.isFinite(draft.autoApprovalLimit) || draft.autoApprovalLimit < 0) {
+  if (!Number.isSafeInteger(draft.budget) || draft.budget <= 0) errors.push("최대 예산은 0보다 커야 합니다.");
+  if (!Number.isSafeInteger(draft.autoApprovalLimit) || draft.autoApprovalLimit < 0) {
     errors.push("자동 승인 한도는 0 이상이어야 합니다.");
   }
   if (draft.autoApprovalLimit > draft.budget) errors.push("자동 승인 한도는 최대 예산보다 클 수 없습니다.");

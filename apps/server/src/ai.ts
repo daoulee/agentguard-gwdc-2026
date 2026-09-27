@@ -105,18 +105,48 @@ const toDraft = (value: unknown, prompt: string, products: Product[]): PolicyDra
     fieldSources.allowedMerchants = baseline.fieldSources.allowedMerchants ?? "safe_default";
   }
   for (const field of missingFields) fieldSources[field] = "needs_confirmation";
+  const warnings = [...new Set([...baseline.warnings, ...(Array.isArray(record.warnings) ? record.warnings.map(String) : [])])];
+  const numberCandidate = (field: "budget" | "autoApprovalLimit") => {
+    const candidate = record[field];
+    if (!Number.isSafeInteger(candidate) || Number(candidate) < (field === "budget" ? 1 : 0)) return baseline[field];
+    if (baseline.missingFields.includes(field)) return field === "autoApprovalLimit" ? 0 : Number(candidate);
+    if (candidate !== baseline[field]) {
+      if (!missingFields.includes(field)) missingFields.push(field);
+      fieldSources[field] = "needs_confirmation";
+      warnings.push(`AI가 해석한 ${field === "budget" ? "예산" : "자동 승인 한도"}가 문장의 명시적 조건과 다릅니다. 직접 확인해주세요.`);
+      return baseline[field];
+    }
+    fieldSources[field] = "ai";
+    return Number(candidate);
+  };
+  const budget = numberCandidate("budget");
+  let autoApprovalLimit = numberCandidate("autoApprovalLimit");
+  if (autoApprovalLimit > budget) {
+    autoApprovalLimit = 0;
+    if (!missingFields.includes("autoApprovalLimit")) missingFields.push("autoApprovalLimit");
+    warnings.push("AI 승인 한도가 예산보다 커서 자동 승인을 보류했습니다.");
+  }
+  let deadline = baseline.deadline;
+  if (typeof record.deadline === "string" && Number.isFinite(new Date(record.deadline).getTime())) {
+    if (baseline.missingFields.includes("deadline")) deadline = baseline.deadline;
+    else if (new Date(record.deadline).getTime() !== new Date(baseline.deadline).getTime()) {
+      if (!missingFields.includes("deadline")) missingFields.push("deadline");
+      warnings.push("AI가 해석한 기한을 문장의 기한과 대조해 확인해주세요.");
+    } else fieldSources.deadline = "ai";
+  }
+  for (const field of missingFields) fieldSources[field] = "needs_confirmation";
   const draft: PolicyDraft = {
     name: baseline.missingFields.includes("allowedCategories") ? String(record.name ?? baseline.name) : baseline.name,
     sourceText: prompt,
-    budget: baseline.budget,
-    autoApprovalLimit: baseline.autoApprovalLimit,
+    budget,
+    autoApprovalLimit,
     currency: "KRW",
     allowedMerchants,
     allowedCategories,
-    deadline: baseline.missingFields.includes("deadline") ? baseline.deadline : String(record.deadline ?? baseline.deadline),
+    deadline,
     requireHumanApproval: baseline.requireHumanApproval || missingFields.includes("autoApprovalLimit"),
     provider: "kiln",
-    warnings: [...new Set([...baseline.warnings, ...(Array.isArray(record.warnings) ? record.warnings.map(String) : [])])],
+    warnings,
     missingFields,
     clarifyingQuestions: missingFields.map((field) => baselineQuestions.get(field) ?? aiQuestionMap.get(field) ?? `${field} 조건을 확인해주세요.`),
     fieldSources
@@ -146,7 +176,6 @@ async function interpretWithKiln(prompt: string, products: Product[]) {
     body: JSON.stringify({
       model: configuration.model,
       temperature: 0,
-      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -166,6 +195,7 @@ async function interpretWithKiln(prompt: string, products: Product[]) {
   const validTokens = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
   return {
     draft: toDraft(JSON.parse(stripCodeFence(content)), prompt, products),
+    modelCandidate: Object.fromEntries(Object.entries(JSON.parse(stripCodeFence(content)) as Record<string, unknown>).filter(([key]) => ["name", "budget", "autoApprovalLimit", "allowedMerchants", "allowedCategories", "deadline", "requireHumanApproval", "missingFields"].includes(key))),
     usage: {
       promptTokens: validTokens(tokens?.prompt_tokens),
       completionTokens: validTokens(tokens?.completion_tokens),
@@ -175,23 +205,29 @@ async function interpretWithKiln(prompt: string, products: Product[]) {
 }
 
 export async function interpretPolicy(prompt: string, products: Product[]) {
+  const startedAt = performance.now();
   const status = getAiStatus();
+  const elapsed = () => Math.round((performance.now() - startedAt) * 1000) / 1000;
   if (status.configured) {
     try {
       const result = await interpretWithKiln(prompt, products);
       return {
         draft: result.draft,
-        usage: { flow: "policy_interpretation", provider: "kiln", model: status.model, status: "success", ...result.usage } as UsageResult
+        modelCandidate: result.modelCandidate,
+        processingMs: elapsed(),
+        usage: { flow: "policy_interpretation", provider: "kiln", model: status.model, status: "success", processingMs: elapsed(), ...result.usage } as UsageResult
       };
     } catch {
       const fallback = createFallbackPolicyDraft(prompt, { availableProducts: products });
       fallback.warnings.unshift("Kiln 응답을 사용할 수 없어 안전 규칙 변환기로 처리했습니다.");
-      return { draft: fallback, usage: emptyUsage(status.model, "failed") };
+      return { draft: fallback, modelCandidate: null, processingMs: elapsed(), usage: { ...emptyUsage(status.model, "failed"), processingMs: elapsed() } };
     }
   }
   return {
     draft: createFallbackPolicyDraft(prompt, { availableProducts: products }),
-    usage: emptyUsage(status.model, "not_configured")
+    modelCandidate: null,
+    processingMs: elapsed(),
+    usage: { ...emptyUsage(status.model, "not_configured"), processingMs: elapsed() }
   };
 }
 
