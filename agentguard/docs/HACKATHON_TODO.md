@@ -15,7 +15,7 @@
 - [x] Kiln OpenAI 호환 API 연결 코드와 토큰 사용량 기록 구현
 - [x] Ethereum Sepolia 감사 해시 제출·검증 경로 구현
 - [ ] 실제 Kiln API 호출 성공 확인
-- [ ] 실제 Sepolia 거래 생성 및 검증
+- [x] 실제 Sepolia 거래 생성 및 검증 (9/28 18:44 연결 검증, `0x9d237b35…`. 대회 중 최종본 재기록 필요)
 - [ ] 최종 배포 주소 확정
 
 ## 대회 전 준비
@@ -85,21 +85,21 @@ npm run dev
 ### 2. Sepolia 감사 기록 연결
 
 - [ ] 행사 정책에서 Ethereum Sepolia 사용이 허용되는지 최종 확인
-- [ ] `.env`에 RPC와 체인 ID 입력
+- [x] `.env`에 RPC와 체인 ID 입력
 
 ```env
 RPC_URL=사용할_SEPOLIA_RPC_URL
 CHAIN_ID=11155111
 ```
 
-- [ ] `node --env-file=.env scripts/check-chain.mjs <지갑주소>` → chainId 11155111·잔액 확인
-- [ ] 브라우저 지갑을 Sepolia로 전환
-- [ ] 지갑에 테스트 ETH 준비
-- [ ] 승인·차단 감사 기록 생성
-- [ ] 최신 감사 해시를 0 ETH 소각 주소(`0x…dEaD`) 거래로 제출
-- [ ] 거래 확정 후 앱에서 검증 실행
+- [x] `node --env-file=.env scripts/check-chain.mjs <지갑주소>` → chainId 11155111·잔액 확인
+- [x] 브라우저 지갑을 Sepolia로 전환
+- [x] 지갑에 테스트 ETH 준비
+- [x] 승인·차단 감사 기록 생성
+- [x] 최신 감사 해시를 0 ETH 소각 주소(`0x…dEaD`) 거래로 제출
+- [x] 거래 확정 후 앱에서 검증 실행
 - [ ] 거래 해시와 감사 해시가 연결된 영수증 확인
-- [ ] Sepolia 탐색기에서 거래 확인 후 URL 보관
+- [x] Sepolia 탐색기에서 거래 확인 후 URL 보관
 
 ### 3. 실제 제출 조건 재확인
 

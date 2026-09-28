@@ -448,8 +448,8 @@ export function App() {
         body: JSON.stringify({ action })
       });
       await refreshActivity();
+      // Stay in the approval inbox so several pending requests can be handled in a row.
       showToast(action === "approve" ? "거래를 승인하고 감사 기록에 저장했습니다." : "거래를 거절하고 감사 기록에 저장했습니다.", action === "approve" ? "success" : "danger");
-      moveToSection("audit", 650);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "승인 처리에 실패했습니다.");
     } finally {

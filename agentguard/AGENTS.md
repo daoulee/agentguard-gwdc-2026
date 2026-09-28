@@ -58,7 +58,7 @@ npm run dev            # web(:5173) + server(:8787) 동시
 # 데모 전 항상: POST /api/demo/reset 으로 누적 지출 초기화
 ```
 
-Kiln 키·지갑 없이도 **Safe fallback**으로 3종 데모가 돈다. 실제 Kiln·Sepolia는 현장에서 `.env`에 연결.
+Kiln 키·지갑 없이도 **Safe fallback**으로 3종 데모가 돈다. Sepolia는 `.env.example`의 공개 RPC로 연결 확인됨(9/28). Kiln 키는 현장 수령 후 `agentguard/.env`에 넣는다. 명령은 모두 `agentguard/` 폴더에서 실행한다.
 
 ---
 
@@ -67,6 +67,7 @@ Kiln 키·지갑 없이도 **Safe fallback**으로 3종 데모가 돈다. 실제
 | 지금 하려는 일 | 열 문서 |
 | --- | --- |
 | **대회 필수 준수사항·심사 배점 (실격 조건)** | `docs/HACKATHON_RULES.md` |
+| 팀원 셋업·`.env`·MetaMask·오늘 겪은 문제 | `docs/TEAM_SETUP.md` |
 | 데모 시나리오·발표 흐름 | `docs/ARCHITECTURE_AND_DEMO.md` |
 | 발표(5분)·Q&A 대비 | `docs/PITCH_DECK.md` |
 | 제출 요건·심사 대비 상태 | `docs/CHALLENGE_B_READINESS.md` |
