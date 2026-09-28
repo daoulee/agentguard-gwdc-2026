@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# secrets (개인키는 절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
+# build artifacts (deployments/ 는 온체인 증빙이라 커밋한다)
+build/*
+!build/.gitkeep

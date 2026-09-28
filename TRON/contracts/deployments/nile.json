@@ -1,0 +1,135 @@
+{
+  "contractName": "AgentGuardVault",
+  "network": "nile",
+  "address": "TMMGEzkAEE6cnG5hWmcmMPwYSZ8MhpgxKZ",
+  "addressHex": "417cd53d598534cdee96f809e25cf54406ce49e5d4",
+  "deployTxId": "4166d83dff42feb499869e003763893d0ecb8ecb6973295a5c2212bcbf267f39",
+  "deployBlock": 71354248,
+  "tronscan": "https://nile.tronscan.org/#/contract/TMMGEzkAEE6cnG5hWmcmMPwYSZ8MhpgxKZ",
+  "deployTxUrl": "https://nile.tronscan.org/#/transaction/4166d83dff42feb499869e003763893d0ecb8ecb6973295a5c2212bcbf267f39",
+  "owner": "TUBgeFBeXrzBAXNp5i2yEDx4GWg7PFBUEk",
+  "aiAgent": "TLK3fz9v8fU6bQusnSMpPp7S3cbX1ikQsd",
+  "guardian": "TUBgeFBeXrzBAXNp5i2yEDx4GWg7PFBUEk",
+  "energyUsed": 1818144,
+  "feeTrx": 194.7434,
+  "deployedAt": "2026-09-28T09:58:40.956Z",
+  "compiler": {
+    "version": "0.8.20+commit.a1b79de6.Emscripten.clang",
+    "evmVersion": "paris",
+    "optimizerRuns": 200
+  },
+  "merchants": {
+    "KeyboardLab": "TBPtH3krzKiBRtcYiPGUu43mJeVdzZFJJM",
+    "TechStore": "TN1g5jGrrtDew7ngmvoYqZxnGfgSCkKayi",
+    "UnlistedMarket": "TFCWYggtWkEC8CURjPknTjnxwavJVAr7no"
+  },
+  "demoRuns": [
+    {
+      "ranAt": "2026-09-28T10:06:44.850Z",
+      "requestIdBase": "17905895318540",
+      "auditLogCount": "4",
+      "steps": [
+        {
+          "label": "정책 설정: 예산 100,000원 · 기한 +24h · 사용자 승인 필요",
+          "method": "setPolicy",
+          "txId": "a5d2b4dcaea12bd8ef7fd1cca5ab63edbbe908e19d2a707f82da1b13f1ff1a7b",
+          "url": "https://nile.tronscan.org/#/transaction/a5d2b4dcaea12bd8ef7fd1cca5ab63edbbe908e19d2a707f82da1b13f1ff1a7b",
+          "energy": 87934,
+          "feeTrx": 8.7934,
+          "audit": null,
+          "executed": false
+        },
+        {
+          "label": "판매자 등록: KeyboardLab",
+          "method": "setMerchant",
+          "txId": "c9b14e4d87769886a03e171819413bf366c4a8c52e8372fe12af62ef36a78481",
+          "url": "https://nile.tronscan.org/#/transaction/c9b14e4d87769886a03e171819413bf366c4a8c52e8372fe12af62ef36a78481",
+          "energy": 22212,
+          "feeTrx": 2.5662,
+          "audit": null,
+          "executed": false
+        },
+        {
+          "label": "판매자 등록: TechStore",
+          "method": "setMerchant",
+          "txId": "9b43072214178950f01190de1108b8bb0847e63022d1ee45c6fcbca97cd9d497",
+          "url": "https://nile.tronscan.org/#/transaction/9b43072214178950f01190de1108b8bb0847e63022d1ee45c6fcbca97cd9d497",
+          "energy": 22212,
+          "feeTrx": 2.5662,
+          "audit": null,
+          "executed": false
+        },
+        {
+          "label": "금고 충전 1 TRX",
+          "method": "deposit",
+          "txId": "4ad9cbb7beb6b26f5d82a443a7c0f16d2e98718972862b86605f6f85e47ee588",
+          "url": "https://nile.tronscan.org/#/transaction/4ad9cbb7beb6b26f5d82a443a7c0f16d2e98718972862b86605f6f85e47ee588",
+          "energy": 1913,
+          "feeTrx": 0.4743,
+          "audit": null,
+          "executed": false
+        },
+        {
+          "label": "시나리오 1: AI 요청 KeyboardLab 87,000원",
+          "method": "requestSpend",
+          "txId": "497fb804b04ed9987c760439e955df9c2ad0bd2039a2f31e1b78e7e83a95135e",
+          "url": "https://nile.tronscan.org/#/transaction/497fb804b04ed9987c760439e955df9c2ad0bd2039a2f31e1b78e7e83a95135e",
+          "energy": 242040,
+          "feeTrx": 24.204,
+          "audit": {
+            "requestId": "17905895318541",
+            "amount": "87000",
+            "isApproved": false,
+            "reason": "Pending Human Approval"
+          },
+          "executed": false
+        },
+        {
+          "label": "시나리오 1: 사용자 approveSpend 서명 → 송금",
+          "method": "approveSpend",
+          "txId": "15189821688a7592894e58331d83932d98a4584eaf1579802aefa51f99f2e906",
+          "url": "https://nile.tronscan.org/#/transaction/15189821688a7592894e58331d83932d98a4584eaf1579802aefa51f99f2e906",
+          "energy": 215917,
+          "feeTrx": 21.9047,
+          "audit": {
+            "requestId": "17905895318541",
+            "amount": "87000",
+            "isApproved": true,
+            "reason": "Approved"
+          },
+          "executed": true
+        },
+        {
+          "label": "시나리오 2: AI 요청 TechStore 98,000+5,000원",
+          "method": "requestSpend",
+          "txId": "aa3dc9ab85ebdd9c1483de27e35d7072f4ff5ac4151367415ebbbec5b78d41ee",
+          "url": "https://nile.tronscan.org/#/transaction/aa3dc9ab85ebdd9c1483de27e35d7072f4ff5ac4151367415ebbbec5b78d41ee",
+          "energy": 146442,
+          "feeTrx": 15.0222,
+          "audit": {
+            "requestId": "17905895318542",
+            "amount": "103000",
+            "isApproved": false,
+            "reason": "Exceeded Budget"
+          },
+          "executed": false
+        },
+        {
+          "label": "시나리오 3: AI 요청 UnlistedMarket 65,000원",
+          "method": "requestSpend",
+          "txId": "610018de5ec8077eb6ab18fcfdd7903b838c643188ccbc4f3b87a34b731585e8",
+          "url": "https://nile.tronscan.org/#/transaction/610018de5ec8077eb6ab18fcfdd7903b838c643188ccbc4f3b87a34b731585e8",
+          "energy": 146238,
+          "feeTrx": 15.0018,
+          "audit": {
+            "requestId": "17905895318543",
+            "amount": "65000",
+            "isApproved": false,
+            "reason": "Unregistered Merchant"
+          },
+          "executed": false
+        }
+      ]
+    }
+  ]
+}

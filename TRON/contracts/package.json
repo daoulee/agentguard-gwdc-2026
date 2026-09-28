@@ -1,0 +1,31 @@
+{
+  "name": "agentguard-tron-contracts",
+  "version": "1.0.0",
+  "description": "AgentGuard spending firewall vault on TRON Nile testnet (GWDC 2026 TRON track)",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "compile": "node scripts/compile.js",
+    "test": "node --test test/*.test.js",
+    "setup:agent": "node scripts/setup_agent.js",
+    "deploy": "node scripts/deploy_nile.js",
+    "demo": "node scripts/demo_nile.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@openzeppelin/contracts": "~5.0.2",
+    "dotenv": "^18.0.3",
+    "ethers": "^6.17.0",
+    "solc": "0.8.20",
+    "tronweb": "^6.5.1"
+  },
+  "devDependencies": {
+    "@ethereumjs/block": "^5.3.0",
+    "@ethereumjs/common": "^4.4.0",
+    "@ethereumjs/util": "^9.1.0",
+    "@ethereumjs/vm": "^8.1.1"
+  },
+  "overrides": {
+    "tmp": "^0.2.7"
+  }
+}
