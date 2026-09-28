@@ -77,7 +77,7 @@ export default function App() {
   return (
     <div className="site-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="TRON Yield Studio 홈"><span className="brand-mark">T<span>↗</span></span><span>TRON <em>YIELD</em><small>STUDIO</small></span></a>
+        <a className="brand" href="#top" aria-label="TRON Yield Studio 홈"><span className="brand-mark">T<span>↗</span></span><span>TRON Yield Studio</span></a>
         <nav className="main-nav" aria-label="주요 메뉴">
           <button className={activeSection === 'planner' ? 'active' : ''} onClick={() => setActiveSection('planner')}>계획 설계</button>
           <button className={activeSection === 'activity' ? 'active' : ''} onClick={() => setActiveSection('activity')}>활동 내역</button>
@@ -99,8 +99,8 @@ export default function App() {
         ) : (
           <>
             <section className="hero">
-              <div className="hero-copy"><p className="eyebrow"><span className="eyebrow-line" /> ASSET ALLOCATION / 01</p><h1>내 자산의 다음 경로,<br /><i>선명하게.</i></h1><p className="lead">보유 금액과 필요한 유동성을 바탕으로 TRON 생태계의 두 가지 배분안을 비교해보세요. 결정은 언제나 사용자가 내립니다.</p><div className="hero-foot"><span className="tiny-icon">✳</span><span>JustLend + USDD</span><span className="hero-foot-sep">/</span><span>설명 가능한 배분</span><span className="hero-foot-sep">/</span><span>사용자 확인 우선</span></div></div>
-              <div className="hero-visual" aria-hidden="true"><div className="orb orb-one" /><div className="orb orb-two" /><div className="orb-ring ring-one" /><div className="orb-ring ring-two" /><span className="visual-label top">CAPITAL IN MOTION <b>↗</b></span><span className="visual-label bottom">TRON ECOSYSTEM / 2026</span></div>
+              <div className="hero-copy"><p className="eyebrow">GWDC 2026 <span>TRON CHALLENGE B</span></p><h1>내 자산의<br />다음 경로<span className="hero-period">.</span></h1><p className="lead">보유 금액과 필요한 유동성을 바탕으로 TRON 생태계의 두 가지 배분안을 비교해보세요. 결정은 언제나 사용자가 내립니다.</p><div className="hero-foot"><span>01 / Asset allocation</span><span>·</span><span>근거를 보고, 직접 선택하세요</span></div></div>
+              <div className="hero-visual" aria-label="현재 선택한 계획 미리보기"><div className="visual-header"><span>PLAN PREVIEW · 01</span><span className="visual-status"><i /> 시연용</span></div><h2>{current.name}</h2><p>사용자 조건에 따라 달라지는 배분 초안</p><div className="visual-amount"><small>계획할 자산</small><strong>{formatAmount(amount)} <span>USDD</span></strong></div><div className="visual-chart"><div className="allocation-bar" aria-hidden="true">{current.allocations.map(item => <span key={item.product} style={{ width: `${item.share}%` }} />)}</div><div><span>JustLend {current.allocations[0].share}%</span><span>USDD {current.allocations[1].share}%</span><span>보유 {current.allocations[2].share}%</span></div></div><div className="visual-footer">수익률은 실시간 연동 전 가정값입니다. <span>↗</span></div></div>
             </section>
 
             <section className="workspace" id="planner">
