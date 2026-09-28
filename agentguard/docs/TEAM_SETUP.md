@@ -35,7 +35,7 @@ npm run dev                      # web :5173 + server :8787
 |---|---|---|
 | `RPC_URL` | `https://ethereum-sepolia-rpc.publicnode.com` | ✅ 키 없이 동작 확인 |
 | `CHAIN_ID` | `11155111` | ✅ |
-| `KILN_API_URL`, `KILN_API_KEY` | 행사 측에서 수령 | ❌ **미수령, 실격 조건** |
+| `KILN_API_URL`, `KILN_API_KEY` | 팀장 로컬 `.env`에만 있음 (값 공유는 채팅이 아닌 직접 전달) | ✅ 9/28 연결 확인 |
 | `KILN_MODEL` | `qwen3-32b` | 수령 후 `node --env-file=.env scripts/check-kiln.mjs`로 확인 |
 
 확인 명령:

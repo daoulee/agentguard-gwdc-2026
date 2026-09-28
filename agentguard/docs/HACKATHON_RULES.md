@@ -67,7 +67,7 @@ AgentGuard 매핑:
 | 요건 | 상태 | 남은 일 |
 |---|---|---|
 | R1 선언문 | ✅ README에 있음 | 최종 데모와 문장이 맞는지 재확인 |
-| R2 Kiln | ⚠️ 코드만 있음. `.env` 미설정이라 **Safe fallback parser로 동작 중** | 행사 키 수령 → `scripts/check-kiln.mjs` → 화면 배지가 `Kiln · qwen3-32b`로 바뀌는지 확인 |
+| R2 Kiln | ✅ 9/28 23:25 실제 호출 성공. `scripts/check-kiln.mjs`로 `/models`에 `qwen3-32b` 확인. 정책 해석 API가 `provider: kiln`으로 응답했고 토큰(입력 298 / 출력 212)이 기록됨 | 영상에 배지 `Kiln · qwen3-32b`와 토큰 기록 화면 포함 |
 | R3 온체인 Tx | ✅ 연결 검증 거래 1건 확정 (9/28 18:44, 블록 11799693). 앱 검증 API로 감사 로그 연결까지 확인. 단 대회 시작 20:00 이전 거래 | 대회 중 최종 데모 후 다시 기록해 README 표에 추가 |
 | In scope / Push ×2 | ✅ 정책 엔진과 감사 로그 구현 | 영상 촬영 |
 | 팀원 셋업 | ✅ `docs/TEAM_SETUP.md` (설치, `.env`, MetaMask, 오늘 겪은 문제) | 조원이 각자 재현 확인 |
