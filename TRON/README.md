@@ -2,6 +2,8 @@
 
 GWDC 2026 TRON Challenge B의 공식 과제는 **AI 자산 배분·수익 계획 도우미**입니다. 현재 웹 화면 초안과 기존 온체인 지출 금고 프로토타입을 함께 보관합니다. 두 프로젝트는 아직 연결되지 않았습니다.
 
+공식 수용 기준 대비 현황과 우선순위는 [Challenge B 보완 보고서](CHALLENGE_B_GAP_REPORT.md)를 참고하세요.
+
 ## 진행 현황
 
 - [`contracts/`](contracts/) — AgentGuardVault 스마트 컨트랙트 (TRON Nile 테스트넷 배포·데모 완료). 자세한 내용은 [`contracts/README.md`](contracts/README.md)
