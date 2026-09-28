@@ -3,6 +3,7 @@
 > 사람과 모든 AI(Claude·GPT·Cursor·Codex 등)가 **작업 전 이 파일만 먼저** 읽는다.
 > 상세는 아래 [문서 라우팅](#문서-라우팅)에서 **필요한 것 하나만** 열어라. 6개를 다 읽지 마라(토큰 낭비).
 > GWDC 2026 · FuriosaAI × Bricksum **Challenge B** 해커톤 제출용.
+> **제출 필수 요건(실격 조건)·마감 9/30 12:00 → [`docs/HACKATHON_RULES.md`](docs/HACKATHON_RULES.md)**
 
 **한 문장:** AI 에이전트의 결제 요청을 사용자 정책으로 **코드가 검사·차단**하고, 지시→승인→거래를 **검증 가능한 감사 기록**으로 잇는 AI 지출 방화벽.
 
@@ -65,6 +66,7 @@ Kiln 키·지갑 없이도 **Safe fallback**으로 3종 데모가 돈다. 실제
 
 | 지금 하려는 일 | 열 문서 |
 | --- | --- |
+| **대회 필수 준수사항·심사 배점 (실격 조건)** | `docs/HACKATHON_RULES.md` |
 | 데모 시나리오·발표 흐름 | `docs/ARCHITECTURE_AND_DEMO.md` |
 | 발표(5분)·Q&A 대비 | `docs/PITCH_DECK.md` |
 | 제출 요건·심사 대비 상태 | `docs/CHALLENGE_B_READINESS.md` |
