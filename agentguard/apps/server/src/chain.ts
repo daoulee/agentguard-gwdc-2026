@@ -1,5 +1,8 @@
 const SEPOLIA_CHAIN_ID = 11155111;
 const ANCHOR_PREFIX = "0x4147"; // ASCII "AG"
+// MetaMask rejects dapp transactions that carry data to the sender's own account,
+// so anchors go to the conventional burn address with 0 value.
+export const ANCHOR_RECIPIENT = "0x000000000000000000000000000000000000dEaD";
 
 type RpcTransaction = {
   hash: string;
@@ -83,7 +86,7 @@ export async function verifyAnchorTransaction(transactionHash: string, auditHash
     || receipt.transactionHash.toLowerCase() !== transactionHash.toLowerCase()
     || transaction.input.toLowerCase() !== expectedData
     || !transaction.to
-    || transaction.from.toLowerCase() !== transaction.to.toLowerCase()
+    || transaction.to.toLowerCase() !== ANCHOR_RECIPIENT.toLowerCase()
     || BigInt(transaction.value) !== 0n
     || BigInt(receipt.status) !== 1n) {
     throw new ChainVerificationError("거래 내용이 감사 해시 기록과 일치하지 않습니다.", 400);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ChainVerificationError, createAnchorData, verifyAnchorTransaction } from "./chain.js";
+import { ANCHOR_RECIPIENT, ChainVerificationError, createAnchorData, verifyAnchorTransaction } from "./chain.js";
 
 const auditHash = "b".repeat(64);
 const transactionHash = `0x${"a".repeat(64)}`;
@@ -19,7 +19,7 @@ test("Sepolia 거래 데이터와 영수증이 감사 해시와 일치해야 앵
     const body = JSON.parse(String(init?.body)) as { method: string };
     const result = body.method === "eth_chainId" ? reportedChainId
       : body.method === "eth_getTransactionByHash" ? {
-        hash: transactionHash, from: address, to: address, value: "0x0", input
+        hash: transactionHash, from: address, to: ANCHOR_RECIPIENT, value: "0x0", input
       }
       : { transactionHash, status: receiptStatus, blockNumber: "0x10" };
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200 });

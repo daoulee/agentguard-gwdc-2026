@@ -422,15 +422,13 @@ export function App() {
       const payload = await evaluateProduct(selectedProductId, fee);
       setEvaluation(payload.evaluation);
       await refreshActivity();
+      // Stay on the simulator so several requests can be checked in a row; the result shows inline.
       if (payload.evaluation.decision.status === "needs_approval") {
-        showToast("사용자 확인이 필요한 거래입니다. 승인함으로 이동합니다.", "neutral");
-        moveToSection("approvals", 1_250);
+        showToast("사용자 확인이 필요한 거래입니다. 승인함에 추가했습니다.", "neutral");
       } else if (payload.evaluation.decision.status === "block") {
-        showToast("정책 위반 거래를 차단했습니다. 감사 로그로 이동합니다.", "danger");
-        moveToSection("audit", 1_250);
+        showToast("정책 위반 거래를 차단하고 감사 로그에 기록했습니다.", "danger");
       } else {
-        showToast("정책 범위 안에서 자동 승인했습니다. 감사 로그로 이동합니다.");
-        moveToSection("audit", 1_250);
+        showToast("정책 범위 안에서 자동 승인하고 감사 로그에 기록했습니다.");
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "정책 검사에 실패했습니다.");
@@ -485,17 +483,26 @@ export function App() {
     try {
       const wallet = (window as Window & { ethereum?: WalletProvider }).ethereum;
       if (!wallet) throw new Error("브라우저에 EVM 지갑이 필요합니다.");
-      const payload = await requestJson<{ auditHash: string; chainId: number; data: string }>("/api/audit/anchor-payload");
+      const payload = await requestJson<{ auditHash: string; chainId: number; data: string; to: string }>("/api/audit/anchor-payload");
       const currentChainId = await wallet.request({ method: "eth_chainId" });
       if (BigInt(String(currentChainId)) !== BigInt(payload.chainId)) {
-        throw new Error("지갑 네트워크를 Ethereum Sepolia로 바꿔주세요.");
+        // Sepolia is built into MetaMask, so ask the wallet to switch before giving up.
+        try {
+          await wallet.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${payload.chainId.toString(16)}` }] });
+        } catch {
+          throw new Error("지갑 네트워크를 Ethereum Sepolia로 바꿔주세요.");
+        }
+        const switchedChainId = await wallet.request({ method: "eth_chainId" });
+        if (BigInt(String(switchedChainId)) !== BigInt(payload.chainId)) {
+          throw new Error("지갑 네트워크를 Ethereum Sepolia로 바꿔주세요.");
+        }
       }
       const accounts = await wallet.request({ method: "eth_requestAccounts" }) as string[];
       const account = accounts[0];
       if (!account) throw new Error("지갑 계정을 선택해주세요.");
       const transactionHash = await wallet.request({
         method: "eth_sendTransaction",
-        params: [{ from: account, to: account, value: "0x0", data: payload.data }]
+        params: [{ from: account, to: payload.to, value: "0x0", data: payload.data }]
       });
       if (typeof transactionHash !== "string" || !/^0x[0-9a-f]{64}$/i.test(transactionHash)) {
         throw new Error("지갑이 거래 해시를 반환하지 않았습니다.");
@@ -505,7 +512,9 @@ export function App() {
       window.localStorage.setItem("agentguard-pending-anchor", JSON.stringify(pending));
       showToast("테스트넷 거래를 제출했습니다. 확정 후 검증 버튼을 눌러주세요.", "neutral");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "테스트넷 거래를 제출하지 못했습니다.");
+      // Wallet errors are plain { code, message } objects, not Error instances.
+      const walletMessage = error && typeof error === "object" && "message" in error ? String((error as { message: unknown }).message) : "";
+      setErrorMessage(walletMessage ? `테스트넷 거래를 제출하지 못했습니다: ${walletMessage}` : "테스트넷 거래를 제출하지 못했습니다.");
     } finally {
       setIsAnchoring(false);
     }
@@ -739,7 +748,7 @@ export function App() {
         <section className="section audit-section" id="audit">
           <div className="section-heading compact-heading"><div><p className="micro-label">TAMPER-EVIDENT AUDIT TRAIL</p><h2>감사 로그</h2></div><div className="audit-actions"><span className={integrityValid ? "integrity-badge" : "integrity-badge is-invalid"}>{integrityValid ? "✓ 해시 체인 정상" : "! 기록 검증 실패"}</span><button className="reset-demo-button" onClick={resetDemo} type="button" title="데모 시연 전 상태를 초기화합니다.">데모 초기화</button></div></div>
           {auditEvents.length === 0 ? <div className="empty-state"><span>⌁</span><div><strong>기록된 이벤트가 없습니다</strong><p>첫 구매 요청부터 모든 판단 근거가 해시로 연결되어 저장됩니다.</p></div></div> : <AuditTrail events={auditEvents} labels={eventLabels} />}
-          {auditEvents.length > 0 && <div className="anchor-panel"><div><strong>감사 해시 테스트넷 기록</strong><p>최신 해시 #{auditEvents[0]?.hash.slice(0, 16)}… · {chainStatus?.network ?? "네트워크 확인 중"}</p><p>자기 지갑 주소로 0 ETH 거래를 보내고 거래 데이터에 감사 해시를 기록합니다. 테스트넷 가스가 필요합니다.</p></div>{!chainStatus?.configured ? <span>Sepolia RPC 설정 필요</span> : pendingAnchor ? <div className="anchor-actions"><code title={pendingAnchor.transactionHash}>{pendingAnchor.transactionHash.slice(0, 14)}…</code><button disabled={isVerifyingAnchor} onClick={verifyPendingAnchor} type="button">{isVerifyingAnchor ? "검증 중…" : "확정 거래 검증"}</button><button className="anchor-clear" onClick={clearPendingAnchor} title="블록체인 거래는 취소되지 않습니다." type="button">대기 표시 지우기</button></div> : <button disabled={isAnchoring || !integrityValid} onClick={submitAuditAnchor} type="button">{isAnchoring ? "지갑 확인 중…" : "지갑으로 해시 기록"}</button>}</div>}
+          {auditEvents.length > 0 && <div className="anchor-panel"><div><strong>감사 해시 테스트넷 기록</strong><p>최신 해시 #{auditEvents[0]?.hash.slice(0, 16)}… · {chainStatus?.network ?? "네트워크 확인 중"}</p><p>소각 주소(0x…dEaD)로 0 ETH 거래를 보내고 거래 데이터에 감사 해시를 기록합니다. 테스트넷 가스가 필요합니다.</p></div>{!chainStatus?.configured ? <span>Sepolia RPC 설정 필요</span> : pendingAnchor ? <div className="anchor-actions"><code title={pendingAnchor.transactionHash}>{pendingAnchor.transactionHash.slice(0, 14)}…</code><button disabled={isVerifyingAnchor} onClick={verifyPendingAnchor} type="button">{isVerifyingAnchor ? "검증 중…" : "확정 거래 검증"}</button><button className="anchor-clear" onClick={clearPendingAnchor} title="블록체인 거래는 취소되지 않습니다." type="button">대기 표시 지우기</button></div> : <button disabled={isAnchoring || !integrityValid} onClick={submitAuditAnchor} type="button">{isAnchoring ? "지갑 확인 중…" : "지갑으로 해시 기록"}</button>}</div>}
           {receiptRequestIds.length > 0 && <div className="receipt-panel"><div className="receipt-controls"><div><strong>구매 판단 영수증</strong><p>요청 당시 정책과 이후 판정을 한곳에서 확인합니다.</p></div><select aria-label="영수증 요청 선택" onChange={(event) => { setSelectedReceiptId(event.target.value); setReceipt(null); }} value={selectedReceiptId || receiptRequestIds[0]}>{receiptRequestIds.map((id) => <option key={id} value={id}>{id}</option>)}</select><button onClick={() => loadReceipt(selectedReceiptId || receiptRequestIds[0] || "")} type="button">영수증 보기</button></div>{receipt && <div className="receipt-body">{receiptPolicy ? <p>정책 v{receiptPolicy.version} · 예산 {formatKrw(receiptPolicy.budget)} · 허용 판매자 {receiptPolicy.allowedMerchants.join(", ")} · 카테고리 {receiptPolicy.allowedCategories.join(", ")} · 기한 {formatDeadline(receiptPolicy.deadline)}</p> : <p>이전 기록에는 정책 스냅샷이 없어 허용 범위를 완전히 재구성할 수 없습니다.</p>}<p>요청 총액 {formatKrw(Number(receiptInput?.details.totalAmount ?? 0))} · 기록 검증 {receipt.integrityValid ? "정상" : "실패"}</p><ol>{receipt.events.map((event) => <li key={event.id}>{eventLabels[event.type]} · {formatTime(event.occurredAt)} · #{event.hash.slice(0, 12)}</li>)}</ol><div className="receipt-anchors">{receipt.anchors.length === 0 ? <p>온체인 거래 해시: 아직 연결되지 않음</p> : receipt.anchors.map((anchor) => <p key={anchor.transactionHash}>Sepolia 블록 {anchor.blockNumber} · <a href={`https://sepolia.etherscan.io/tx/${anchor.transactionHash}`} rel="noreferrer" target="_blank">거래 #{anchor.transactionHash.slice(0, 16)}…</a> · 기록 해시 #{anchor.anchoredHash.slice(0, 12)}…</p>)}</div></div>}</div>}
           {energy && (
             <details className="energy-panel"><summary>추론 효율 · 가정에 따른 절감 추정</summary>

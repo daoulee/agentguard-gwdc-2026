@@ -9,7 +9,7 @@ import {
   type PolicyDraft,
 } from "@agentguard/shared";
 import { getAiStatus, interpretPolicy } from "./ai.js";
-import { ChainVerificationError, createAnchorData, getChainStatus, verifyAnchorTransaction } from "./chain.js";
+import { ANCHOR_RECIPIENT, ChainVerificationError, createAnchorData, getChainStatus, verifyAnchorTransaction } from "./chain.js";
 import { DemoStore } from "./store.js";
 import { summarizeEnergy } from "./energy.js";
 
@@ -84,7 +84,7 @@ export function createApp(store = new DemoStore()) {
       response.status(404).json({ message: "온체인에 기록할 감사 이벤트가 없습니다." });
       return;
     }
-    response.json({ auditHash, chainId: getChainStatus().chainId, data: createAnchorData(auditHash) });
+    response.json({ auditHash, chainId: getChainStatus().chainId, data: createAnchorData(auditHash), to: ANCHOR_RECIPIENT });
   });
   app.post("/api/audit/anchors", async (request, response) => {
     const { transactionHash, auditHash } = (request.body ?? {}) as { transactionHash?: unknown; auditHash?: unknown };
