@@ -2,6 +2,20 @@
 
 작성일: 2026-09-28 · 대상: [TRON Yield Studio](https://tron-yield-studio-gwdc.pages.dev/)
 
+## 2026-09-28 23:40 보완 결과 (아래 원래 평가 이후)
+
+아래 "공식 기준 대비 현황"은 보완 **전** 평가다. 이후 `frontend/`를 다시 만들어 다음을 구현했다. 상세 대응표와 한계는 [`frontend/README.md`](frontend/README.md).
+
+| 공식 기준 | 보완 전 | 보완 후 |
+|---|---|---|
+| Needs Analysis | 부분 충족 | 충족: 대화형 추출·재질문·요약 확정, Kiln `qwen3-32b`는 빈칸만 보완 |
+| TRON Ecosystem Integration | 미충족 | 충족: JustLend OpenAPI·USDD data-platform·TronGrid 실시간 조회, 출처·시각·조건, 실패·오래됨 처리 |
+| Plans & Yield Estimates | 부분 충족 | 충족: 두 계획, 기본/보상 분리, 에너지 기반 진입·회수 비용, 회수 조건·위험, 추천 이유 |
+| AI Execution & Management | 미충족 | 부분 충족: 행동 미리보기(금액·수수료·위험·정확한 승인 범위)·확인·기록·재배분 제안. 실제 실행은 Nile jTRX만, 메인넷은 시뮬레이션 |
+| Tracking & Review | 미충족 | 충족(명시된 시뮬레이션 포함): 버전별 계획·가정, 최신 금리 리플레이, Nile 실제 잔고 |
+
+남은 일: Nile TRX 확보 후 jTRX 공급·회수 실거래 Tx를 README 증빙에 기록, 공개 사이트 재배포(Kiln 키는 Pages 암호화 변수), 3분 영상.
+
 ## 결론
 
 현재 웹은 **TRON 자산 배분·수익 계획**이라는 주제와 사용자 입력 → 두 계획 비교라는 첫 흐름에 맞는다. 다만 공식 Challenge B가 요구하는 **AI 기반 요구 파악, 검증 가능한 생태계 데이터, 실행, 포지션 관리·리뷰**는 아직 구현되지 않았다. 따라서 제출 시점에 이 웹을 완성된 AI 투자 도우미라고 소개하면 실제 동작과 어긋난다. 지금은 화면 시연용 프로토타입으로 설명하는 것이 정확하다.
