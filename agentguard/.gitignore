@@ -1,9 +1,11 @@
-.DS_Store
 node_modules/
 dist/
 .env
 .env.*
 !.env.example
+.DS_Store
 coverage/
 *.log
 *.tsbuildinfo
+apps/server/data/*.json
+!apps/server/data/.gitkeep
