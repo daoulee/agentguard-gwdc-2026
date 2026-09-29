@@ -187,6 +187,16 @@ function finalizePlan(base: Omit<Plan, 'totals' | 'incentiveShare' | 'exitCondit
   };
 }
 
+// Name the second plan after what it actually holds, so a TRX-only plan is not called a reward plan.
+export function rewardPlanLabel(allocations: Allocation[]): { name: string; tagline: string } {
+  const usesReward = allocations.some(item => item.incentiveApy > 0);
+  const usesStake = allocations.some(item => item.opportunityId === 'strx');
+  if (usesReward && usesStake) return { name: '보상·스테이킹 수익형', tagline: 'USDD 채굴 보상과 sTRX 스테이킹으로 수익을 높입니다. 보상 종료·디페그·회수 대기 위험을 함께 집니다.' };
+  if (usesReward) return { name: '보상 포함 수익형', tagline: 'USDD 채굴 보상을 더해 수익을 높입니다. 보상 종료·USDD 디페그 위험을 함께 집니다.' };
+  if (usesStake) return { name: '스테이킹 수익형', tagline: 'TRX를 sTRX 스테이킹에 두어 수익을 높입니다. 회수 대기 기간과 TRX 가격 위험을 함께 집니다.' };
+  return { name: '대안 계획 (조건상 기본과 같음)', tagline: '유동성·기간 조건 때문에 보상이나 스테이킹을 쓸 수 없어 기본 수익 중심과 같은 배분입니다.' };
+}
+
 export function buildPlans(needs: Needs, snapshot: MarketSnapshot): PlanSet {
   const days = needs.horizonDays ?? 90;
   const { fees } = snapshot;
@@ -276,7 +286,7 @@ export function buildPlans(needs: Needs, snapshot: MarketSnapshot): PlanSet {
       }
     }
     if (jusdd && jusdd.incentiveApy > 0) warnings.push(`이 계획 수익의 상당 부분이 기간 한정 USDD 채굴 보상(${pct(jusdd.incentiveApy)})입니다. 보상이 끝나면 USDD 공급의 기본 수익률은 ${pct(jusdd.baseApy)}입니다.`);
-    plans.push(finalizePlan({ id: 'reward', name: '보상 포함 수익형', tagline: 'USDD 채굴 보상과 스테이킹을 더해 수익을 높입니다. 보상 종료·디페그·회수 대기 위험을 함께 집니다.', allocations, actions, rationale, warnings }, snapshot.opportunities, fees, days));
+    plans.push(finalizePlan({ id: 'reward', ...rewardPlanLabel(allocations), allocations, actions, rationale, warnings }, snapshot.opportunities, fees, days));
   }
 
   // Recommendation: conservative users avoid plans whose yield depends mostly on rewards.
@@ -287,7 +297,7 @@ export function buildPlans(needs: Needs, snapshot: MarketSnapshot): PlanSet {
     : `예상 순수익이 같거나 더 높고 구조가 단순합니다.`;
   if (needs.risk === 'conservative' && reward.incentiveShare > 0.5) {
     recommendedId = 'core';
-    recommendationReason = `안정형을 선택하셨고, 보상 포함 수익형은 수익의 ${Math.round(reward.incentiveShare * 100)}%가 기간 한정 보상이라 기본 수익 중심을 추천합니다.`;
+    recommendationReason = `안정형을 선택하셨고, ${reward.name}은 수익의 ${Math.round(reward.incentiveShare * 100)}%가 기간 한정 보상이라 기본 수익 중심을 추천합니다.`;
   }
   return { plans, recommendedId, recommendationReason, excluded };
 }

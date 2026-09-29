@@ -43,6 +43,17 @@ export function Opportunities({ snapshot, loading, onRefresh }: Props) {
           <div><span>USDD PSM 수수료</span><strong>{snapshot.fees.psmFeeIn != null ? pct(snapshot.fees.psmFeeIn) : '—'}</strong><small>USDT → USDD</small></div>
         </div>
       )}
+      {snapshot?.usdd && (
+        <div className="usdd-card">
+          <div><p className="eyebrow">USDD PROTOCOL · TRON</p><h3>USDD 상태와 교환 경로</h3><p className="fine">USDD를 쓰는 계획은 이 값으로 회수 경로와 위험을 판단합니다. {snapshot.usdd.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label} ↗ </a>)}</p></div>
+          <div className="fee-strip inline">
+            <div><span>담보율 (TRON)</span><strong className={snapshot.usdd.collateralRatio < 1.2 ? 'bad-text' : ''}>{pct(snapshot.usdd.collateralRatio, 0)}</strong><small>담보 ÷ 발행</small></div>
+            <div><span>발행량</span><strong>${fmt(snapshot.usdd.supplyUsd / 1e6, 0)}M</strong><small>USDD (TRON)</small></div>
+            <div><span>USDT → USDD</span><strong>{snapshot.usdd.psmTin != null ? pct(snapshot.usdd.psmTin) : '—'}</strong><small>PSM tin (API)</small></div>
+            <div><span>USDD → USDT</span><strong>{snapshot.usdd.psmTout != null ? pct(snapshot.usdd.psmTout) : '미확인'}</strong><small>PSM tout (체인)</small></div>
+          </div>
+        </div>
+      )}
       <p className="fine">바이낸스 월렛 TRON Carnival 같은 공동 캠페인은 기간·자격·보상 규칙을 API로 검증할 수 없어 포함하지 않았습니다.</p>
     </section>
   );

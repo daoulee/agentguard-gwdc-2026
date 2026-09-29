@@ -266,3 +266,8 @@ footer i { color: var(--accent); font-style: normal; }
 
 @media(max-width:1080px) { .needs-grid { grid-template-columns: 1fr; } .fee-strip { grid-template-columns: repeat(2, 1fr); } .fee-strip > div { border-bottom: 1px solid var(--line); } .review-grid, .two-col { grid-template-columns: 1fr; } }
 @media(max-width:760px) { .nile-form { grid-template-columns: 1fr; } .chat-log { height: 300px; } .bubble { max-width: 92%; } .chat-card { padding: 18px; } .results-top { flex-wrap: wrap; } .ai-head { flex-wrap: wrap; } }
+.usdd-card { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 24px; align-items: center; margin-top: 16px; padding: 22px; border: 1px solid var(--line); border-left: 4px solid var(--green); background: var(--panel); }
+.usdd-card h3 { margin: 8px 0 0; font-size: 20px; letter-spacing: -.04em; }
+.usdd-card .fine a { margin-right: 8px; }
+.fee-strip.inline { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
+@media(max-width:1080px) { .usdd-card { grid-template-columns: 1fr; } .fee-strip.inline { grid-template-columns: repeat(2, 1fr); } }

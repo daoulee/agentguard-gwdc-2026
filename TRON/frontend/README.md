@@ -22,7 +22,7 @@ npm run typecheck && npm run build
 | 공식 기준 | 구현 | 위치 |
 |---|---|---|
 | Needs Analysis | 대화에서 보유 자산·기간·유동성·위험을 추출. 빠진 항목은 재질문, 요약을 사용자가 확정. 규칙 파서가 먼저 읽고, Kiln `qwen3-32b`는 **빈칸만** 채움(사용자 말과 충돌하면 무시) | `src/domain/needs.ts`, `src/components/NeedsChat.tsx`, `server/llm.ts` |
-| TRON Ecosystem Integration | JustLend OpenAPI(`/lend/jtoken`, `/mining/apy`, `/lend/strx`), USDD data-platform(`latest-collateral?chain=tron`, PSM 수수료), TronGrid(에너지 가격, approve 에너지 실측). 값마다 출처·조회 시각·조건 표시, 10분 지나면 오래된 값 경고, 실패 시 추천 중지 | `src/data/sources.ts`, `src/components/Opportunities.tsx` |
+| TRON Ecosystem Integration | JustLend OpenAPI(`/lend/jtoken`, `/mining/apy`, `/lend/strx`), USDD data-platform(`latest-collateral?chain=tron`: 담보율·발행량·PSM 수수료) + USDD PSM `tout()` 체인 조회, TronGrid(에너지 가격, approve 에너지 실측). 값마다 출처·조회 시각·조건 표시, 10분 지나면 오래된 값 경고, 실패 시 추천 중지 | `src/data/sources.ts`, `src/components/Opportunities.tsx` |
 | Plans & Yield Estimates | 두 계획(기본 수익 중심 / 보상 포함 수익형). 배분액, **기본 수익과 기간 한정 보상 분리**, 진입·회수 비용(에너지×체인 가격), 회수 조건, 위험, 보상 의존도, 추천 이유 | `src/domain/plans.ts`, `src/components/PlanCompare.tsx` |
 | AI Execution & Management | 계획을 approve·PSM 교환·공급·스테이킹 행동으로 변환. 행동마다 금액·수수료·위험·**정확한 승인 범위(무제한 승인 아님)** 표시, 체크 후에만 실행. Nile jTRX 공급·회수는 TronLink 서명으로 실제 실행, 메인넷 행동은 시뮬레이션으로 기록. 조건 변화(보상 감소, 유동성 변경) 시 재배분 제안 → 확인 → 새 버전 기록 | `src/domain/plans.ts`, `src/chain/tronlink.ts`, `src/components/Execution.tsx`, `src/domain/journal.ts` |
 | Tracking & Review | 원래 계획·가정 금리·조회 시각을 버전별로 저장. 같은 포지션을 최신 금리로 다시 계산한 **시뮬레이션 리플레이**와 예상 대비 차이. Nile jTRX는 체인에서 잔고를 직접 읽어 실제 변화 표시 | `src/domain/journal.ts`, `src/components/Activity.tsx` |
@@ -32,7 +32,8 @@ npm run typecheck && npm run build
 - **메인넷 실행은 하지 않습니다.** 메인넷 행동은 서명·전송 없는 시뮬레이션이며 화면과 기록에 "시뮬레이션"으로 표시합니다.
 - **실제 거래는 Nile 테스트넷 jTRX(TRX 공급·회수)만** 지원합니다. Faucet USDT(`TXYZop…`)가 JustLend Nile USDT(`TPYwAC…`)와 다른 토큰이라 스테이블코인 경로는 테스트넷에서도 실행할 수 없습니다.
 - 에너지 사용량은 **USDT approve만 TronGrid 실측**입니다. 공급·교환·스테이킹·회수 에너지는 가정값이며 화면에 "가정값"으로 표시합니다.
-- USDD 공식 API의 TRON `apy`(4%)는 참여 경로·회수 조건을 API로 확인할 수 없어 **계획에서 제외**하고 이유를 표시합니다.
+- USDD 공식 API의 TRON `apy`(4%)는 USDD Savings(sUSDD) 수익률인데, [공식 문서](https://docs.usdd.io/user-guide/usdd-savings)상 sUSDD 예치는 **Ethereum/BNB Chain 전용**이고 TRON 예치 규모(earnTvl)는 0입니다. 브릿지 비용·위험 때문에 **계획에서 제외**하고 근거를 표시합니다.
+- USDD는 대신 **프로토콜 상태로 계획에 반영**합니다: TRON 담보율(담보÷발행, USDD data-platform), PSM USDT→USDD(tin, API)·USDD→USDT(tout, 체인 조회) 수수료로 교환·회수 경로와 디페그 위험을 판단합니다.
 - sTRX 언스테이크 대기 기간은 API로 확인하지 못해 "대기 기간 있음, JustLend 화면에서 확인"으로만 안내합니다.
 - TRON Carnival 등 공동 캠페인은 기간·자격·보상 규칙을 검증할 수 없어 넣지 않았습니다.
 - 기록은 브라우저 `localStorage`에 저장됩니다(서버 DB 없음).

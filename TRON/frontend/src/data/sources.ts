@@ -39,9 +39,21 @@ export type FeeContext = {
   fetchedAt: string;
 };
 
+// USDD protocol state on TRON, used for the USDD legs of a plan (conversion path and risk).
+export type UsddHealth = {
+  supplyUsd: number;
+  collateralUsd: number;
+  collateralRatio: number;
+  psmTin: number | null; // USDT -> USDD fee
+  psmTout: number | null; // USDD -> USDT fee (on-chain)
+  sources: SourceRef[];
+  fetchedAt: string;
+};
+
 export type MarketSnapshot = {
   opportunities: Opportunity[];
   fees: FeeContext;
+  usdd: UsddHealth | null;
   errors: string[];
   fetchedAt: string;
 };
@@ -99,6 +111,8 @@ const justLendSource: SourceRef = { label: 'JustLend OpenAPI /lend/jtoken', url:
 const miningSource: SourceRef = { label: 'JustLend OpenAPI /mining/apy', url: ENDPOINTS.mining };
 const strxSource: SourceRef = { label: 'JustLend OpenAPI /lend/strx', url: ENDPOINTS.strx };
 const usddSource: SourceRef = { label: 'USDD data-platform (chain=tron)', url: ENDPOINTS.usddTron };
+const usddSavingsDoc: SourceRef = { label: 'USDD Docs: USDD Savings', url: 'https://docs.usdd.io/user-guide/usdd-savings' };
+const psmSource: SourceRef = { label: 'USDD PSM tout() (TronGrid)', url: 'https://tronscan.org/#/contract/TBXW4hS5KYjjbJXDpnrPf4zhkLwrpUjbyz' };
 
 export function buildJustLendOpportunities(tokens: JToken[], mining: Record<string, { USDD?: string }>, fetchedAt: string): Opportunity[] {
   const bySymbol = new Map(tokens.map(token => [token.symbol, token]));
@@ -174,27 +188,87 @@ export function buildStrxOpportunity(data: StrxData, fetchedAt: string): Opportu
   };
 }
 
-type UsddTron = { apy: number | null; items: Array<{ vaultType: string; psmFee: string | null; contractAddress: string }> };
+type UsddTron = {
+  apy: number | null;
+  totalSupplyValue?: number;
+  totalCollateralValue?: number;
+  items: Array<{ vaultType: string; psmFee: string | null; contractAddress: string }>;
+};
 
 export function buildUsddOpportunity(data: UsddTron, fetchedAt: string): Opportunity {
   const apy = num(data.apy);
   return {
     id: 'usdd-protocol',
     project: 'USDD',
-    name: 'USDD 프로토콜 공시 수익률 (TRON)',
+    name: 'USDD Savings (sUSDD)',
     asset: 'USDD',
     contract: MAINNET.USDD,
     baseApy: Number.isFinite(apy) ? apy : 0,
     incentiveApy: 0,
-    exit: '참여 경로와 회수 조건이 API에 없어 확인되지 않았습니다.',
-    risks: ['USDD 디페그 위험', '참여 경로 미확인'],
-    terms: ['USDD 공식 데이터 플랫폼의 TRON 체인 apy 값입니다. 어떤 상품에 참여해야 이 수익을 받는지는 API가 알려주지 않습니다.'],
-    sources: [usddSource],
+    exit: '문서상 잠금 없이 언제든 회수(출금) 가능. 단 Ethereum/BNB Chain의 sUSDD 기준이며 TRON에서는 참여 불가.',
+    risks: ['USDD 디페그 위험', 'TRON에서 쓰려면 다른 체인으로 브릿지해야 함'],
+    terms: ['USDD 공식 API가 TRON 체인에 공시한 저축 수익률입니다. 공식 문서상 USDD Savings(sUSDD) 예치는 Ethereum/BNB Chain 네트워크에서만 제공되고, TRON 체인의 예치 규모(earnTvl)는 0입니다.'],
+    sources: [usddSource, usddSavingsDoc],
     fetchedAt,
-    // Shown for transparency, but not allocated to until the participation route is verified.
+    // Shown for transparency, but TRON users cannot deposit into it without bridging.
     usable: false,
-    unusableReason: '참여 경로·회수 조건을 API로 확인할 수 없어 계획에 넣지 않습니다.',
+    unusableReason: '공식 문서상 sUSDD 저축은 Ethereum/BNB Chain 전용입니다. TRON에서는 브릿지 비용·위험이 추가돼 계획에 넣지 않습니다.',
   };
+}
+
+export function buildUsddHealth(data: UsddTron, psmTout: number | null, fetchedAt: string): UsddHealth | null {
+  const supplyUsd = num(data.totalSupplyValue);
+  const collateralUsd = num(data.totalCollateralValue);
+  if (!Number.isFinite(supplyUsd) || !Number.isFinite(collateralUsd) || supplyUsd <= 0) return null;
+  const psm = data.items.find(item => item.vaultType === 'PSM-USDT-A');
+  const tin = psm?.psmFee != null ? num(psm.psmFee) : NaN;
+  return {
+    supplyUsd,
+    collateralUsd,
+    collateralRatio: collateralUsd / supplyUsd,
+    psmTin: Number.isFinite(tin) ? tin : null,
+    psmTout,
+    sources: psmTout != null ? [usddSource, psmSource] : [usddSource],
+    fetchedAt,
+  };
+}
+
+// USDD legs of a plan carry the protocol's live state: how to get back to USDT, and how well
+// the stablecoin is collateralized right now.
+export function applyUsddHealth(opportunities: Opportunity[], health: UsddHealth | null): Opportunity[] {
+  if (!health) return opportunities;
+  const ratio = `${(health.collateralRatio * 100).toFixed(0)}%`;
+  return opportunities.map(item => (item.id !== 'jl-usdd' ? item : {
+    ...item,
+    exit: `${item.exit} USDD→USDT는 USDD PSM으로 1:1 교환${health.psmTout != null ? ` (수수료 ${(health.psmTout * 100).toFixed(2)}%, 체인 조회)` : ' (역교환 수수료 미확인)'}.`,
+    risks: [...item.risks, `USDD 담보율 ${ratio} (TRON 체인: 담보 $${Math.round(health.collateralUsd / 1e6).toLocaleString('en-US')}M / 발행 $${Math.round(health.supplyUsd / 1e6).toLocaleString('en-US')}M). 담보율이 낮아지면 디페그 위험이 커집니다.`],
+    sources: [...item.sources, ...health.sources],
+  }));
+}
+
+// Keyless TronGrid rate-limits constant calls; reuse the last good on-chain read if needed.
+async function withCache(key: string, read: () => Promise<number | null>): Promise<number | null> {
+  try {
+    const value = await read();
+    if (value != null) try { localStorage.setItem(key, JSON.stringify({ value, at: new Date().toISOString() })); } catch { /* storage unavailable */ }
+    return value;
+  } catch (error) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(key) ?? 'null') as { value: number } | null;
+      if (cached && Number.isFinite(cached.value)) return cached.value;
+    } catch { /* ignore */ }
+    throw error;
+  }
+}
+
+async function readPsmTout(): Promise<number | null> {
+  const body = await getJson<{ constant_result?: string[] }>(ENDPOINTS.constantCall, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner_address: MAINNET.USDT, contract_address: MAINNET.usddPsm, function_selector: 'tout()', parameter: '', visible: true }),
+  });
+  const raw = body.constant_result?.[0];
+  return raw ? Number(BigInt(`0x${raw.slice(0, 64)}`)) / 1e18 : null;
 }
 
 const APPROVE_CACHE_KEY = 'tron-yield-approve-energy';
@@ -253,13 +327,18 @@ export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
     settle('approve 에너지 측정', measureApproveEnergyCached),
   ]);
 
-  const opportunities: Opportunity[] = [];
+  // Run after the burst above; keyless TronGrid rate-limits parallel constant calls.
+  const psmTout = usdd ? await settle('USDD PSM 역교환 수수료', () => withCache('tron-yield-psm-tout', readPsmTout)) : null;
+  const usddHealth = usdd ? buildUsddHealth(usdd, psmTout, fetchedAt) : null;
+
+  let opportunities: Opportunity[] = [];
   if (jtoken) {
     if (!mining) errors.push('채굴 보상을 불러오지 못해 인센티브를 0으로 표시합니다.');
     opportunities.push(...buildJustLendOpportunities(jtoken.tokenList, mining ?? {}, fetchedAt));
   }
   if (strx) opportunities.push(buildStrxOpportunity(strx, fetchedAt));
   if (usdd) opportunities.push(buildUsddOpportunity(usdd, fetchedAt));
+  opportunities = applyUsddHealth(opportunities, usddHealth);
 
   const param = (key: string) => params?.chainParameter.find(item => item.key === key)?.value;
   const usdtPriceInTrx = num(jtoken?.tokenList.find(token => token.symbol === 'jUSDT')?.underlyingPriceInTrx);
@@ -286,7 +365,7 @@ export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
     fetchedAt,
   };
 
-  return { opportunities, fees, errors, fetchedAt };
+  return { opportunities, fees, usdd: usddHealth, errors, fetchedAt };
 }
 
 export const isStale = (fetchedAt: string, now = Date.now()) => now - new Date(fetchedAt).getTime() > STALE_AFTER_MS;
