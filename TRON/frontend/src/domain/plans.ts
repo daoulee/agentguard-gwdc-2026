@@ -6,7 +6,7 @@ import type { Needs } from './needs';
 // until we measure them on-chain, and the UI labels them as such.
 export const ENERGY_ASSUMPTIONS = {
   supplyTrc20: 150_000,
-  supplyTrx: 70_000,
+  supplyTrx: 81_000, // Nile jTRX mint dry-run on 2026-09-29: 80,894 energy
   redeem: 120_000,
   psmSwap: 160_000,
   stakeTrx: 100_000,

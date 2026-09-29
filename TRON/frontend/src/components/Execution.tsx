@@ -53,6 +53,7 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
     if (!wallet || !nileAck || nileAmount <= 0) return;
     const record = ensureRecord();
     setNileBusy(kind);
+    setNileAck(false); // one confirmation per transaction
     setNileStatus('TronLink에서 서명을 확인해주세요…');
     const label = kind === 'supply' ? `Nile jTRX 공급: ${fmt(nileAmount)} TRX` : `Nile jTRX 회수: ${fmt(nileAmount)} TRX`;
     const scope = kind === 'supply' ? `Nile jTRX 계약(${NILE.jTRX})으로 ${fmt(nileAmount)} TRX를 보냅니다.` : `Nile jTRX에서 ${fmt(nileAmount)} TRX만 회수합니다.`;
@@ -61,10 +62,14 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
       setNileStatus('전송됨. 블록 확정을 기다리는 중…');
       const receipt = await waitForReceipt(txid);
       addLog(record.id, { label, kind: kind === 'supply' ? 'supply' : 'redeem', mode: 'nile', status: receipt.status, amount: nileAmount, asset: 'TRX', feeTrx: nileFeeTrx, approvalScope: scope, txHash: txid, message: receipt.message });
-      setNileStatus(receipt.status === 'success' ? '성공했습니다. 아래 기록과 포지션 화면에서 확인하세요.' : `상태: ${receipt.status} ${receipt.message ?? ''}`);
-      const refreshed = await connectWallet();
-      setWallet(refreshed);
-      onNilePosition({ ...(await readNilePosition(refreshed.address)), address: refreshed.address });
+      try {
+        const refreshed = await connectWallet();
+        setWallet(refreshed);
+        onNilePosition({ ...(await readNilePosition(refreshed.address)), address: refreshed.address });
+      } catch { /* the transaction result above stands even if the refresh fails */ }
+      setNileStatus(receipt.status === 'success'
+        ? `${kind === 'supply' ? '공급' : '회수'} 성공. ${kind === 'supply' ? '회수하려면 금액을 확인하고 다시 체크한 뒤 "Nile에서 회수"를 누르세요.' : '아래 기록과 포지션 화면에서 확인하세요.'}`
+        : `상태: ${receipt.status} ${receipt.message ?? ''}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const rejected = /cancel|reject|거부|declined/i.test(message);
@@ -72,7 +77,6 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
       setNileStatus(rejected ? '사용자가 서명을 거부했습니다. 기록에 남겼습니다.' : `실패: ${message}`);
     } finally {
       setNileBusy(null);
-      setNileAck(false);
     }
   }
 
@@ -120,7 +124,7 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
                 <div><dt>위험</dt><dd>테스트넷 자산이라 금전 손실은 없습니다. 거래는 되돌릴 수 없습니다.</dd></div>
               </dl>
             </div>
-            <label className="ack"><input type="checkbox" checked={nileAck} onChange={event => setNileAck(event.target.checked)} /> {fmt(nileAmount)} TRX 거래 내용을 확인했습니다.</label>
+            <label className="ack"><input type="checkbox" checked={nileAck} disabled={!!nileBusy} onChange={event => setNileAck(event.target.checked)} /> {fmt(nileAmount)} TRX 거래 내용을 확인했습니다.</label>
             <div className="button-row">
               <button className="button primary" disabled={!nileAck || !!nileBusy || wallet.network !== 'nile' || nileAmount <= 0 || nileAmount > wallet.trxBalance} onClick={() => runNile('supply')}>{nileBusy === 'supply' ? '진행 중…' : 'Nile에 공급 (mint)'} <span>↗</span></button>
               <button className="button secondary" disabled={!nileAck || !!nileBusy || wallet.network !== 'nile' || nileAmount <= 0} onClick={() => runNile('redeem')}>{nileBusy === 'redeem' ? '진행 중…' : 'Nile에서 회수 (redeem)'} <span>↙</span></button>

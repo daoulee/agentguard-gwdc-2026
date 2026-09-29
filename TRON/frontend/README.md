@@ -31,7 +31,8 @@ npm run typecheck && npm run build
 
 - **메인넷 실행은 하지 않습니다.** 메인넷 행동은 서명·전송 없는 시뮬레이션이며 화면과 기록에 "시뮬레이션"으로 표시합니다.
 - **실제 거래는 Nile 테스트넷 jTRX(TRX 공급·회수)만** 지원합니다. Faucet USDT(`TXYZop…`)가 JustLend Nile USDT(`TPYwAC…`)와 다른 토큰이라 스테이블코인 경로는 테스트넷에서도 실행할 수 없습니다.
-- 에너지 사용량은 **USDT approve만 TronGrid 실측**입니다. 공급·교환·스테이킹·회수 에너지는 가정값이며 화면에 "가정값"으로 표시합니다.
+- 에너지 사용량은 **USDT approve(메인넷, TronGrid 실측)와 TRX 공급(Nile jTRX mint 드라이런 80,894)** 만 실측 기반입니다. 교환·스테이킹·회수 에너지는 가정값이며 화면에 "가정값"으로 표시합니다.
+- 지갑 연결은 TronLink 현행 방식(TIP-6963 탐지 → `window.tron` → `eth_requestAccounts` → `provider.tronWeb`)을 쓰고, 구버전(`window.tronLink`·`tron_requestAccounts`)으로 자동 전환합니다. 네트워크는 지갑 노드에 Nile 전용 jTRX 계약을 조회해 판별하며, 메인넷이면 실행을 막습니다.
 - USDD 공식 API의 TRON `apy`(4%)는 USDD Savings(sUSDD) 수익률인데, [공식 문서](https://docs.usdd.io/user-guide/usdd-savings)상 sUSDD 예치는 **Ethereum/BNB Chain 전용**이고 TRON 예치 규모(earnTvl)는 0입니다. 브릿지 비용·위험 때문에 **계획에서 제외**하고 근거를 표시합니다.
 - USDD는 대신 **프로토콜 상태로 계획에 반영**합니다: TRON 담보율(담보÷발행, USDD data-platform), PSM USDT→USDD(tin, API)·USDD→USDT(tout, 체인 조회) 수수료로 교환·회수 경로와 디페그 위험을 판단합니다.
 - sTRX 언스테이크 대기 기간은 API로 확인하지 못해 "대기 기간 있음, JustLend 화면에서 확인"으로만 안내합니다.

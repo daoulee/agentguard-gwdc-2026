@@ -8,7 +8,9 @@ export const NILE = {
   faucet: 'https://nileex.io/join/getJoinPage',
 } as const;
 
-const FEE_LIMIT_SUN = 100_000_000; // 100 TRX cap per transaction
+// Dry-run on Nile (2026-09-29): jTRX mint used 80,894 energy ≈ 8.1 TRX burned. 30 TRX leaves room
+// for redeem while staying below a small test wallet's balance.
+const FEE_LIMIT_SUN = 30_000_000;
 
 type TronWeb = {
   defaultAddress?: { base58?: string | false };
@@ -21,16 +23,32 @@ type TronWeb = {
     sendRawTransaction(signed: unknown): Promise<{ result?: boolean; txid?: string; code?: string; message?: string }>;
     getTransactionInfo(txid: string): Promise<{ id?: string; receipt?: { result?: string }; result?: string; resMessage?: string }>;
     getBalance(address: string): Promise<number>;
+    getContract(address: string): Promise<{ name?: string; contract_address?: string } | undefined>;
   };
 };
 
-type TronWindow = Window & { tronWeb?: TronWeb; tronLink?: { request(args: { method: string }): Promise<{ code?: number; message?: string } | undefined> } };
+// TronLink's current provider (window.tron, TIP-1193/TIP-1102) with the legacy window.tronLink as fallback.
+type Provider = { request(args: { method: string; params?: unknown }): Promise<unknown>; tronWeb?: TronWeb | false; isTronLink?: boolean };
+type TronWindow = Window & { tron?: Provider; tronLink?: Provider; tronWeb?: TronWeb };
 
 export type WalletState = { address: string; network: 'nile' | 'mainnet' | 'other'; trxBalance: number };
 
 const tronWindow = () => window as TronWindow;
+let announced: Provider | null = null;
+let active: { tronWeb: TronWeb; network: WalletState['network'] } | null = null;
 
-export const hasTronLink = () => Boolean(tronWindow().tronLink || tronWindow().tronWeb);
+// TIP-6963 multi-wallet discovery: TronLink announces itself in response to this event.
+if (typeof window !== 'undefined') {
+  window.addEventListener('TIP6963:announceProvider', event => {
+    const detail = (event as CustomEvent<{ info?: { name?: string }; provider?: Provider }>).detail;
+    if (detail?.provider && (!announced || detail.info?.name === 'TronLink')) announced = detail.provider;
+  });
+  window.dispatchEvent(new Event('TIP6963:requestProvider'));
+}
+
+const findProvider = (): Provider | undefined => announced ?? tronWindow().tron ?? tronWindow().tronLink;
+
+export const hasTronLink = () => Boolean(findProvider() || tronWindow().tronWeb);
 
 function networkOf(host = ''): WalletState['network'] {
   if (host.includes('nile')) return 'nile';
@@ -38,25 +56,49 @@ function networkOf(host = ''): WalletState['network'] {
   return 'other';
 }
 
-export async function connectWallet(): Promise<WalletState> {
-  const w = tronWindow();
-  if (!w.tronLink && !w.tronWeb) throw new Error('TronLink 확장 프로그램이 필요합니다.');
-  if (w.tronLink) {
-    const response = await w.tronLink.request({ method: 'tron_requestAccounts' });
-    if (response && response.code !== undefined && response.code !== 200) throw new Error(response.message ?? 'TronLink 연결이 거부됐습니다.');
+// The host string differs across TronLink versions, so confirm Nile by asking the wallet's node
+// for the JustLend Nile jTRX contract, which does not exist on mainnet.
+async function detectNetwork(tronWeb: TronWeb): Promise<WalletState['network']> {
+  const byHost = networkOf(tronWeb.fullNode?.host);
+  if (byHost !== 'other') return byHost;
+  try {
+    const contract = await tronWeb.trx.getContract(NILE.jTRX);
+    return contract?.name === 'JustLend-TRX' ? 'nile' : 'other';
+  } catch { return 'other'; }
+}
+
+async function requestAccounts(provider: Provider) {
+  try {
+    await provider.request({ method: 'eth_requestAccounts' });
+  } catch (error) {
+    const code = (error as { code?: number })?.code;
+    if (code === 4001) throw new Error('TronLink에서 연결을 거부했습니다.');
+    if (code === -32000) throw new Error('TronLink 잠금을 해제한 뒤 20초 후 다시 시도해주세요.');
+    if (code !== 4200) throw error;
+    // Older TronLink builds only understand the legacy method.
+    const legacy = await provider.request({ method: 'tron_requestAccounts' }) as { code?: number; message?: string } | undefined;
+    if (legacy && legacy.code !== undefined && legacy.code !== 200) throw new Error(legacy.message ?? 'TronLink 연결이 거부됐습니다.');
   }
-  const tronWeb = w.tronWeb;
-  const address = tronWeb?.defaultAddress?.base58;
+}
+
+export async function connectWallet(): Promise<WalletState> {
+  const provider = findProvider();
+  if (!provider && !tronWindow().tronWeb) throw new Error('TronLink 확장 프로그램이 필요합니다. 설치 후 새로고침하세요.');
+  if (provider) await requestAccounts(provider);
+  const tronWeb = (provider?.tronWeb || undefined) ?? tronWindow().tronLink?.tronWeb ?? tronWindow().tronWeb;
+  const address = tronWeb ? tronWeb.defaultAddress?.base58 : undefined;
   if (!tronWeb || !address) throw new Error('TronLink 잠금을 해제하고 계정을 선택해주세요.');
+  const network = await detectNetwork(tronWeb);
+  active = { tronWeb, network };
   const trxBalance = (await tronWeb.trx.getBalance(address)) / 1_000_000;
-  return { address, network: networkOf(tronWeb.fullNode?.host), trxBalance };
+  return { address, network, trxBalance };
 }
 
 function requireNile(): { tronWeb: TronWeb; address: string } {
-  const tronWeb = tronWindow().tronWeb;
+  const tronWeb = active?.tronWeb;
   const address = tronWeb?.defaultAddress?.base58;
   if (!tronWeb || !address) throw new Error('TronLink를 먼저 연결해주세요.');
-  if (networkOf(tronWeb.fullNode?.host) !== 'nile') throw new Error('TronLink 네트워크를 Nile 테스트넷으로 바꿔주세요. 메인넷 자산은 사용하지 않습니다.');
+  if (active?.network !== 'nile') throw new Error('TronLink 네트워크를 Nile 테스트넷으로 바꾸고 다시 연결해주세요. 메인넷 자산은 사용하지 않습니다.');
   return { tronWeb, address };
 }
 
