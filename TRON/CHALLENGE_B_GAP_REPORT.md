@@ -14,7 +14,9 @@
 | AI Execution & Management | 미충족 | 부분 충족: 행동 미리보기(금액·수수료·위험·정확한 승인 범위)·확인·기록·재배분 제안. 실제 실행은 Nile jTRX만, 메인넷은 시뮬레이션 |
 | Tracking & Review | 미충족 | 충족(명시된 시뮬레이션 포함): 버전별 계획·가정, 최신 금리 리플레이, Nile 실제 잔고 |
 
-남은 일: Nile TRX 확보 후 jTRX 공급·회수 실거래 Tx를 README 증빙에 기록, 공개 사이트 재배포(Kiln 키는 Pages 암호화 변수), 3분 영상.
+남은 일(9/28 기준): Nile TRX 확보 후 jTRX 공급·회수 실거래 Tx를 README 증빙에 기록, 공개 사이트 재배포(Kiln 키는 Pages 암호화 변수), 3분 영상.
+
+> 2026-09-29 갱신: Nile jTRX 공급·회수 실거래 2건 기록([`README.md`](README.md#on-chain-verification-proof-tron-nile)), 공개 사이트 재배포 완료. 최신 현황은 `README.md`의 "현재 상태"를 따른다.
 
 ## 결론
 

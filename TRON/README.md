@@ -8,7 +8,7 @@
 - [`contracts/`](contracts/) — AgentGuardVault 스마트 컨트랙트 (AI 지출 통제 금고, Nile 배포). **TRON B 제출물과 별개**이며 Yield Studio에 연결돼 있지 않습니다. 자세한 내용은 [`contracts/README.md`](contracts/README.md)
 - [`CHALLENGE_B_GAP_REPORT.md`](CHALLENGE_B_GAP_REPORT.md) — 공식 수용 기준 대비 현황
 
-## 현재 상태 (2026-09-29 16:50 KST)
+## 현재 상태 (2026-09-29 17:26 KST)
 
 | 공식 기준 | 상태 |
 |---|---|
@@ -29,7 +29,7 @@
 |---|---|---|
 | 대회 전 | `7587bb5` (09-28 19:11, 팀원) | `contracts/` AgentGuardVault 컨트랙트와 Nile 데모 (TRON B 제출물과 별개) |
 | 대회 전 | `d5e4dd2` (09-28 19:55) | `frontend/` 첫 화면 초안: 입력 폼과 고정 비율 배분 비교 (시연값) |
-| **대회 중** | `20d6646` ~ 최신 (09-28 22:06 이후) | 디자인, 공식 기준 대비 보고서, **Yield Studio 전면 재구성**(`37d0745`: 실데이터·대화형 요구 분석·Kiln·계획 엔진·실행·리뷰·테스트), USDD 보강(`ebfbbb8`), TronLink 최신 연결·Nile 실행 버그 수정(`65743a2`), Nile 실거래 증빙(`f997078`), Kiln 프록시 보호(`359b938`) |
+| **대회 중** | `20d6646` ~ 최신 (09-28 22:06 이후) | 디자인, 공식 기준 대비 보고서, **Yield Studio 전면 재구성**(`37d0745`: 실데이터·대화형 요구 분석·Kiln·계획 엔진·실행·리뷰·테스트), USDD 보강(`ebfbbb8`), TronLink 최신 연결·Nile 실행 버그 수정(`65743a2`), Nile 실거래 증빙(`f997078`), Kiln 프록시 보호(`359b938`), 실행 기록에 체인 영수증 실제 수수료·사이트 내 증빙 링크(`9120837`), 유동성 조건 변경 시 USDD→USDT 재배분 제안(`414b0ea`) |
 
 `git log --since="2026-09-28T20:00:00+09:00" -- TRON` 로 대회 중 커밋만 볼 수 있습니다.
 
@@ -40,7 +40,7 @@ JustLend Nile jTRX 계약(`TKM7w4qFmkXQLEF2MgrQroBYpd5TY7i1pq`)에 TronLink 서�
 | 행동 | Tx Hash | 결과 |
 |---|---|---|
 | 공급 `mint()` 10 TRX | [`c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7`](https://nile.tronscan.org/#/transaction/c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7) | SUCCESS · 블록 71380724 · 80,894 에너지 (8.09 TRX 소각) · 894.64 jTRX 수령 |
-| 회수 `redeemUnderlying(uint256)` 10 TRX | [`016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0`](https://nile.tronscan.org/#/transaction/016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0) | SUCCESS |
+| 회수 `redeemUnderlying(uint256)` 10 TRX | [`016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0`](https://nile.tronscan.org/#/transaction/016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0) | SUCCESS · 블록 71380788 · 73,155 에너지 (7.32 TRX 소각) |
 
 - 지갑: `TZ7ZwYbcmrip3szkkb2TSJtGZ54TWxMKtB` (Nile 테스트넷)
 - 실행일: 2026-09-29 17:05~17:09 KST (대회 기간 중)
