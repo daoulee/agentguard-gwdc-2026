@@ -7,7 +7,7 @@ if (!base || !key) { console.error('✖ KILN_API_URL / KILN_API_KEY 가 .env에 
 const headers = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
 const mask = (text) => String(text).replaceAll(key, '***');
 
-console.log(`base=${base} model=${model} key=${key.slice(0, 6)}…(${key.length}자)`);
+console.log(`base=${base} model=${model} key=설정됨`);
 
 let started = performance.now();
 const list = await fetch(`${base}/models`, { headers }).catch((error) => ({ ok: false, status: 0, text: async () => error.message }));
