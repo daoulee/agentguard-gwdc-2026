@@ -117,6 +117,18 @@ export function proposeAdjustments(record: PlanRecord, snapshot: MarketSnapshot,
     const live = current.get(item.opportunityId as Opportunity['id']);
     if (!assumed || !live) continue;
     const incentiveDropped = assumed.incentiveApy > 0 && live.incentiveApy < assumed.incentiveApy * 0.5;
+    // USDD exits through a PSM swap and carries depeg risk, so money that must now be withdrawable
+    // any time is better held as USDT supply.
+    const needsInstantNow = needsNow.liquidity === 'instant' && record.needs.liquidity !== 'instant';
+    if (item.opportunityId === 'jl-usdd' && jusdt && needsInstantNow && !incentiveDropped) {
+      proposals.push({
+        id: `${item.key}-to-jusdt-liquidity`,
+        reason: '유동성 조건이 "언제든 인출"로 바뀌었습니다. USDD는 회수할 때 PSM 교환을 거치고 디페그 위험이 있어, 즉시 쓸 수 있는 USDT 공급으로 옮기는 편이 맞습니다.',
+        from: item.label, to: jusdt.name, amount: item.amount, asset: item.asset,
+        expectedGainUsd: item.usd * (jusdt.baseApy - (live.baseApy + live.incentiveApy)) * horizonDays / 365,
+      });
+      continue;
+    }
     if (item.opportunityId === 'jl-usdd' && jusdt && (incentiveDropped || live.baseApy + live.incentiveApy < jusdt.baseApy)) {
       const gain = item.usd * (jusdt.baseApy - (live.baseApy + live.incentiveApy)) * horizonDays / 365;
       proposals.push({

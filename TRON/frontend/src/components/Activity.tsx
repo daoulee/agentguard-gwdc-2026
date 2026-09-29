@@ -90,7 +90,7 @@ export function Activity({ records, logs, snapshot, nilePosition, onApplyProposa
       <div className="detail-card">
         <div className="detail-header"><div><p className="eyebrow">MONITOR & ADJUST</p><h3>조건 변화와 재배분 제안</h3></div></div>
         <fieldset className="field"><legend>지금의 유동성 필요 (바뀌었다면 선택)</legend><div className="segmented three">{(['instant', 'month', 'long'] as Liquidity[]).map(option => <button key={option} type="button" className={liquidity === option ? 'selected' : ''} onClick={() => setLiquidityNow(option)}>{liquidityLabel[option]}</button>)}</div></fieldset>
-        {proposals.length === 0 ? <p className="fine">최신 데이터 기준으로 조정할 필요가 없습니다. 보상이 절반 아래로 줄거나, 유동성 조건이 sTRX와 맞지 않게 되면 제안합니다.</p> : (
+        {proposals.length === 0 ? <p className="fine">최신 데이터 기준으로 조정할 필요가 없습니다. 보상이 절반 아래로 줄거나, 유동성 조건이 바뀌어 sTRX(회수 대기)·USDD(PSM 교환 필요)가 맞지 않게 되면 제안합니다.</p> : (
           <ul className="proposal-list">{proposals.map(proposal => (
             <li key={proposal.id}>
               <strong>{proposal.from} → {proposal.to}</strong>

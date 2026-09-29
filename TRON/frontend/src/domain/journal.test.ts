@@ -22,6 +22,16 @@ describe('journal review and monitoring', () => {
     expect(proposals[0].reason).toContain('4.03%에서 1.00%로');
   });
 
+  it('proposes moving USDD back to USDT supply when money must become withdrawable any time', () => {
+    const plan = buildPlans(needs, snapshot).plans[1];
+    const record = createRecord(needs, plan, snapshot);
+    expect(proposeAdjustments(record, snapshot, needs, 150)).toHaveLength(0);
+    const proposals = proposeAdjustments(record, snapshot, { ...needs, liquidity: 'instant' }, 150);
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0].to).toContain('JustLend USDT');
+    expect(proposals[0].reason).toContain('언제든 인출');
+  });
+
   it('proposes leaving sTRX when liquidity needs change', () => {
     const trxNeeds = { holdings: [{ asset: 'TRX' as const, amount: 20000 }], horizonDays: 365, liquidity: 'long' as const, risk: 'aggressive' as const };
     const record = createRecord(trxNeeds, buildPlans(trxNeeds, snapshot).plans[1], snapshot);
