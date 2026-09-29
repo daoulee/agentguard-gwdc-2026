@@ -271,3 +271,7 @@ footer i { color: var(--accent); font-style: normal; }
 .usdd-card .fine a { margin-right: 8px; }
 .fee-strip.inline { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
 @media(max-width:1080px) { .usdd-card { grid-template-columns: 1fr; } .fee-strip.inline { grid-template-columns: repeat(2, 1fr); } }
+.proof-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 12px 0 4px; padding: 10px 12px; background: #eaf4ef; font-size: 11px; }
+.proof-row span { color: var(--green); font-weight: 700; }
+.proof-row a { color: var(--ink); }
+footer a { color: var(--accent); }

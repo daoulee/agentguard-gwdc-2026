@@ -4,6 +4,7 @@ import { Execution } from './components/Execution';
 import { NeedsChat } from './components/NeedsChat';
 import { Opportunities } from './components/Opportunities';
 import { PlanCompare } from './components/PlanCompare';
+import { NILE } from './chain/tronlink';
 import { callAi } from './data/ai';
 import { fetchMarketSnapshot, type MarketSnapshot } from './data/sources';
 import { createLog, createRecord, loadJournal, saveJournal, type ActionLog, type Journal, type PlanRecord, type Proposal } from './domain/journal';
@@ -98,7 +99,7 @@ export default function App() {
                 <div className="visual-header"><span>LIVE PLAN CANVAS</span><span className="visual-status"><i /> {loading ? '조회 중' : snapshot ? '실데이터' : '조회 실패'}</span></div>
                 <div className="route-glyph" aria-hidden="true"><span>↗</span><span>↗</span><span>↗</span></div>
                 <h2>{plan ? plan.name : confirmed ? '데이터 대기 중' : '조건을 알려주세요'}</h2>
-                <p>{confirmed ? formatNeedsSummary(needs).join(' · ') : '왼쪽 아래 대화창에서 보유 자산과 목표를 말해주세요.'}</p>
+                <p>{confirmed ? formatNeedsSummary(needs).join(' · ') : '아래 대화창에서 보유 자산과 목표를 말해주세요.'}</p>
                 <div className="visual-amount"><small>{plan ? `${needs.horizonDays}일 예상 순수익` : '계획할 자산'}</small><strong>{plan ? usd(plan.totals.netUsd) : needs.holdings.length ? needs.holdings.map(item => `${fmt(item.amount, 0)} ${item.asset}`).join(' + ') : '—'}</strong></div>
                 {plan && <div className="visual-chart"><div className="allocation-bar" aria-hidden="true">{plan.allocations.map(item => <span key={item.key} style={{ width: `${item.usd / Math.max(plan.allocations.reduce((sum, a) => sum + a.usd, 0), 1e-9) * 100}%` }} />)}</div><div>{plan.allocations.map(item => <span key={item.key}>{item.label}</span>)}</div></div>}
                 <div className="visual-footer">기본 수익과 기간 한정 보상을 나눠 보여줍니다. <span>↗</span></div>
@@ -118,7 +119,7 @@ export default function App() {
           </>
         )}
       </main>
-      <footer><span>TRON YIELD STUDIO <i>✳</i> GWDC 2026</span><span>데이터: JustLend OpenAPI · USDD data-platform · TronGrid · 실행: Nile 테스트넷 / 시뮬레이션</span></footer>
+      <footer><span>TRON YIELD STUDIO <i>✳</i> GWDC 2026 · <a href={NILE.explorerTx(NILE.proofs[0].txid)} target="_blank" rel="noreferrer">Nile 온체인 증빙 ↗</a></span><span>데이터: JustLend OpenAPI · USDD data-platform · TronGrid · 실행: Nile 테스트넷 / 시뮬레이션</span></footer>
     </div>
   );
 }

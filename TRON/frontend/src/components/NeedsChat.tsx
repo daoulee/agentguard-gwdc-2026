@@ -56,7 +56,7 @@ export function NeedsChat({ needs, onNeedsChange, confirmed, onConfirm, onReset,
     const remaining = missingFields(next);
     const reply = remaining.length
       ? `${merged.captured.length || note ? '확인했어요. ' : ''}${followUpQuestion[remaining[0]]}`
-      : '필요한 정보가 모두 모였어요. 오른쪽 요약이 맞는지 확인하고 "이 조건으로 확정"을 눌러주세요. 틀린 부분은 다시 말씀해주시면 고칠게요.';
+      : '필요한 정보가 모두 모였어요. 요약 카드가 맞는지 확인하고 "이 조건으로 확정"을 눌러주세요. 틀린 부분은 다시 말씀해주시면 고칠게요.';
     setMessages(current => [...current, { role: 'assistant', text: reply, note }]);
   }
 

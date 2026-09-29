@@ -6,6 +6,11 @@ export const NILE = {
   api: 'https://nile.trongrid.io',
   explorerTx: (txid: string) => `https://nile.tronscan.org/#/transaction/${txid}`,
   faucet: 'https://nileex.io/join/getJoinPage',
+  // Recorded with this app via TronLink on 2026-09-29 (see TRON/README.md).
+  proofs: [
+    { label: '공급 mint() 10 TRX', txid: 'c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7' },
+    { label: '회수 redeemUnderlying() 10 TRX', txid: '016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0' },
+  ],
 } as const;
 
 // Dry-run on Nile (2026-09-29): jTRX mint used 80,894 energy ≈ 8.1 TRX burned. 30 TRX leaves room
@@ -21,7 +26,7 @@ type TronWeb = {
   trx: {
     sign(transaction: unknown): Promise<unknown>;
     sendRawTransaction(signed: unknown): Promise<{ result?: boolean; txid?: string; code?: string; message?: string }>;
-    getTransactionInfo(txid: string): Promise<{ id?: string; receipt?: { result?: string }; result?: string; resMessage?: string }>;
+    getTransactionInfo(txid: string): Promise<{ id?: string; fee?: number; receipt?: { result?: string; energy_usage_total?: number }; result?: string; resMessage?: string }>;
     getBalance(address: string): Promise<number>;
     getContract(address: string): Promise<{ name?: string; contract_address?: string } | undefined>;
   };
@@ -120,7 +125,7 @@ function decodeMessage(message: string) {
 export const supplyTrxOnNile = (amountTrx: number) => send('mint()', { callValue: Math.round(amountTrx * 1_000_000) }, []);
 export const redeemTrxOnNile = (amountTrx: number) => send('redeemUnderlying(uint256)', {}, [{ type: 'uint256', value: Math.round(amountTrx * 1_000_000) }]);
 
-export type Receipt = { status: 'success' | 'failed' | 'pending'; message?: string };
+export type Receipt = { status: 'success' | 'failed' | 'pending'; message?: string; feeTrx?: number; energy?: number };
 
 export async function waitForReceipt(txid: string, timeoutMs = 60_000): Promise<Receipt> {
   const { tronWeb } = requireNile();
@@ -129,7 +134,9 @@ export async function waitForReceipt(txid: string, timeoutMs = 60_000): Promise<
     const info = await tronWeb.trx.getTransactionInfo(txid).catch(() => ({} as Awaited<ReturnType<TronWeb['trx']['getTransactionInfo']>>));
     if (info?.id) {
       const ok = info.receipt?.result === 'SUCCESS' || (!info.receipt?.result && info.result !== 'FAILED');
-      return ok ? { status: 'success' } : { status: 'failed', message: info.resMessage ? decodeMessage(info.resMessage) : info.receipt?.result };
+      // The receipt carries what the chain actually charged, which replaces our estimate in the log.
+      const actual = { feeTrx: (info.fee ?? 0) / 1_000_000, energy: info.receipt?.energy_usage_total };
+      return ok ? { status: 'success', ...actual } : { status: 'failed', message: info.resMessage ? decodeMessage(info.resMessage) : info.receipt?.result, ...actual };
     }
     await new Promise(resolve => setTimeout(resolve, 3_000));
   }

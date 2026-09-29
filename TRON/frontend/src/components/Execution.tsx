@@ -61,7 +61,7 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
       const txid = kind === 'supply' ? await supplyTrxOnNile(nileAmount) : await redeemTrxOnNile(nileAmount);
       setNileStatus('전송됨. 블록 확정을 기다리는 중…');
       const receipt = await waitForReceipt(txid);
-      addLog(record.id, { label, kind: kind === 'supply' ? 'supply' : 'redeem', mode: 'nile', status: receipt.status, amount: nileAmount, asset: 'TRX', feeTrx: nileFeeTrx, approvalScope: scope, txHash: txid, message: receipt.message });
+      addLog(record.id, { label, kind: kind === 'supply' ? 'supply' : 'redeem', mode: 'nile', status: receipt.status, amount: nileAmount, asset: 'TRX', feeTrx: receipt.feeTrx ?? nileFeeTrx, approvalScope: scope, txHash: txid, message: [receipt.feeTrx != null ? `실제 수수료 ${fmt(receipt.feeTrx)} TRX${receipt.energy ? ` · ${fmt(receipt.energy, 0)} 에너지` : ''} (체인 영수증)` : '수수료는 추정값', receipt.message].filter(Boolean).join(' · ') });
       try {
         const refreshed = await connectWallet();
         setWallet(refreshed);
@@ -108,6 +108,7 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
       <div className="detail-card nile-card">
         <div className="detail-header"><div><p className="eyebrow">REAL TESTNET EXECUTION · NILE</p><h3>JustLend jTRX 공급·회수 실거래</h3></div><span className="pill ok">실제 거래</span></div>
         <p className="fine">메인넷 자금은 쓰지 않습니다. TronLink를 Nile 테스트넷으로 바꾸고, TRX가 없으면 <a href={NILE.faucet} target="_blank" rel="noreferrer">Nile Faucet ↗</a>에서 받으세요. 대상 계약: <code>{NILE.jTRX}</code> (JustLend Nile jTRX)</p>
+        <div className="proof-row"><span>이 화면으로 실행한 Nile 실거래 증빙</span>{NILE.proofs.map(proof => <a key={proof.txid} href={NILE.explorerTx(proof.txid)} target="_blank" rel="noreferrer">{proof.label} · <code>{shortAddress(proof.txid)}</code> ↗</a>)}</div>
         {!wallet ? (
           <button className="button secondary" onClick={connect}>{hasTronLink() ? 'TronLink 연결' : 'TronLink 필요 (설치 후 새로고침)'} <span>↗</span></button>
         ) : (
