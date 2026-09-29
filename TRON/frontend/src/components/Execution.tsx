@@ -119,7 +119,7 @@ export function Execution({ plan, fees, ensureRecord, addLog, logs, onNilePositi
             <div className="nile-form">
               <label className="field"><span>금액 <small>TRX (테스트넷)</small></span><div className="input-wrap"><input type="number" min="1" step="1" value={nileAmount} onChange={event => { setNileAmount(Number(event.target.value)); setNileAck(false); }} /><b>TRX</b></div></label>
               <dl className="mini-preview">
-                <div><dt>예상 수수료</dt><dd>최대 약 {fmt(nileFeeTrx)} TRX (가정 {fmt(ENERGY_ASSUMPTIONS.supplyTrx, 0)} 에너지) · 상한 100 TRX</dd></div>
+                <div><dt>예상 수수료</dt><dd>최대 약 {fmt(nileFeeTrx)} TRX (가정 {fmt(ENERGY_ASSUMPTIONS.supplyTrx, 0)} 에너지) · 상한 30 TRX</dd></div>
                 <div><dt>승인 범위</dt><dd>토큰 승인 없음. 입력한 TRX만 이동합니다.</dd></div>
                 <div><dt>위험</dt><dd>테스트넷 자산이라 금전 손실은 없습니다. 거래는 되돌릴 수 없습니다.</dd></div>
               </dl>

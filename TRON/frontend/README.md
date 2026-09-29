@@ -47,3 +47,15 @@ wrangler pages deploy dist --project-name tron-yield-studio-gwdc --branch main
 ```
 
 `functions/api/chat.ts`가 Pages Function으로 함께 배포됩니다. AI를 켜려면 Pages 프로젝트 설정에 `KILN_API_URL`, `KILN_API_KEY`(암호화), `KILN_MODEL`을 넣습니다. 넣지 않으면 공개 사이트는 규칙 기반으로 동작합니다.
+
+## On-Chain Verification Proof (TRON Nile)
+
+JustLend Nile jTRX 계약(`TKM7w4qFmkXQLEF2MgrQroBYpd5TY7i1pq`)에 TronLink 서명으로 실제 실행한 공급·회수입니다. 앱의 실행 기록(방식: Nile 실거래)과 같은 해시입니다.
+
+| 행동 | Tx Hash | 결과 |
+|---|---|---|
+| 공급 `mint()` 10 TRX | [`c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7`](https://nile.tronscan.org/#/transaction/c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7) | SUCCESS · 블록 71380724 · 80,894 에너지 (8.09 TRX 소각) · 894.64 jTRX 수령 |
+| 회수 `redeemUnderlying(uint256)` 10 TRX | [`016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0`](https://nile.tronscan.org/#/transaction/016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0) | SUCCESS |
+
+- 지갑: `TZ7ZwYbcmrip3szkkb2TSJtGZ54TWxMKtB` (Nile 테스트넷)
+- 실행일: 2026-09-29 17:05~17:09 KST (대회 기간 중)

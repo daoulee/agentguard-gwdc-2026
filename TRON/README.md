@@ -15,8 +15,20 @@
 | Needs Analysis | ✅ 대화형 요구 파악·재질문·요약 확정 (규칙 파서 + Kiln `qwen3-32b` 빈칸 보완) |
 | TRON Ecosystem Integration | ✅ JustLend·USDD 메인넷 API 실시간 조회, 출처·시각·조건 표시. USDD 담보율·PSM 양방향 수수료를 회수 경로·위험에 반영 |
 | Plans & Yield Estimates | ✅ 두 계획, 기본/보상 분리, 비용·회수 조건·위험 |
-| AI Execution & Management | ⚠️ 부분: 행동 미리보기·확인·기록·재배분 제안 구현. 실제 실행은 Nile jTRX만, 메인넷은 시뮬레이션 |
+| AI Execution & Management | ✅/⚠️ 행동 미리보기·확인·기록·재배분 제안. Nile jTRX 공급·회수 실거래 완료, 스테이블코인·메인넷 행동은 시뮬레이션 |
 | Tracking & Review | ✅ 버전별 계획·가정 기록, 시뮬레이션 리플레이(명시), Nile 실제 잔고 조회 |
-| 온체인 증빙 | ❌ Nile 실거래 Tx 아직 없음 (TronLink 지갑 TRX 0 → Faucet 필요) |
+| 온체인 증빙 | ✅ Nile jTRX 공급·회수 실거래 2건 (아래 증빙) |
 
 공개 주소 https://tron-yield-studio-gwdc.pages.dev/ 는 2026-09-29 최신 버전으로 재배포됨 (AI는 Cloudflare에 Kiln 키 설정 전까지 규칙 기반).
+
+## On-Chain Verification Proof (TRON Nile)
+
+JustLend Nile jTRX 계약(`TKM7w4qFmkXQLEF2MgrQroBYpd5TY7i1pq`)에 TronLink 서명으로 실제 실행한 공급·회수입니다. 앱의 실행 기록(방식: Nile 실거래)과 같은 해시입니다.
+
+| 행동 | Tx Hash | 결과 |
+|---|---|---|
+| 공급 `mint()` 10 TRX | [`c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7`](https://nile.tronscan.org/#/transaction/c5c4c29d1a03a9ede7778a651617f9dfc711e3b2c93406ae529300738dcd94c7) | SUCCESS · 블록 71380724 · 80,894 에너지 (8.09 TRX 소각) · 894.64 jTRX 수령 |
+| 회수 `redeemUnderlying(uint256)` 10 TRX | [`016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0`](https://nile.tronscan.org/#/transaction/016a07ad4715150d5a416903a1312c65094fcb73885df13933128ffa025607d0) | SUCCESS |
+
+- 지갑: `TZ7ZwYbcmrip3szkkb2TSJtGZ54TWxMKtB` (Nile 테스트넷)
+- 실행일: 2026-09-29 17:05~17:09 KST (대회 기간 중)
