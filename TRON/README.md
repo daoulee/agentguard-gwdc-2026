@@ -12,14 +12,26 @@
 
 | 공식 기준 | 상태 |
 |---|---|
-| Needs Analysis | ✅ 대화형 요구 파악·재질문·요약 확정 (규칙 파서 + Kiln `qwen3-32b` 빈칸 보완) |
+| Needs Analysis | ✅ 대화형 요구 파악·재질문·요약 확정 (규칙 파서 + Kiln `qwen3-32b` 빈칸 보완, 공개 사이트에서도 동작) |
 | TRON Ecosystem Integration | ✅ JustLend·USDD 메인넷 API 실시간 조회, 출처·시각·조건 표시. USDD 담보율·PSM 양방향 수수료를 회수 경로·위험에 반영 |
 | Plans & Yield Estimates | ✅ 두 계획, 기본/보상 분리, 비용·회수 조건·위험 |
 | AI Execution & Management | ✅/⚠️ 행동 미리보기·확인·기록·재배분 제안. Nile jTRX 공급·회수 실거래 완료, 스테이블코인·메인넷 행동은 시뮬레이션 |
 | Tracking & Review | ✅ 버전별 계획·가정 기록, 시뮬레이션 리플레이(명시), Nile 실제 잔고 조회 |
 | 온체인 증빙 | ✅ Nile jTRX 공급·회수 실거래 2건 (아래 증빙) |
 
-공개 주소 https://tron-yield-studio-gwdc.pages.dev/ 는 2026-09-29 최신 버전으로 재배포됨 (AI는 Cloudflare에 Kiln 키 설정 전까지 규칙 기반).
+공개 주소 https://tron-yield-studio-gwdc.pages.dev/ 는 2026-09-29 최신 버전입니다. Kiln `qwen3-32b`가 서버 함수(`/api/chat`)로 연결돼 있으며, 키는 Cloudflare 암호화 변수에만 있고 이 사이트에서 온 요청만 처리합니다.
+
+## 코드 출처 구분 (대회 규정)
+
+기준은 git 커밋 시각이며, 대회 기간은 2026-09-28 20:00 KST부터입니다.
+
+| 구분 | 커밋 | 범위 |
+|---|---|---|
+| 대회 전 | `7587bb5` (09-28 19:11, 팀원) | `contracts/` AgentGuardVault 컨트랙트와 Nile 데모 (TRON B 제출물과 별개) |
+| 대회 전 | `d5e4dd2` (09-28 19:55) | `frontend/` 첫 화면 초안: 입력 폼과 고정 비율 배분 비교 (시연값) |
+| **대회 중** | `20d6646` ~ 최신 (09-28 22:06 이후) | 디자인, 공식 기준 대비 보고서, **Yield Studio 전면 재구성**(`37d0745`: 실데이터·대화형 요구 분석·Kiln·계획 엔진·실행·리뷰·테스트), USDD 보강(`ebfbbb8`), TronLink 최신 연결·Nile 실행 버그 수정(`65743a2`), Nile 실거래 증빙(`f997078`), Kiln 프록시 보호(`359b938`) |
+
+`git log --since="2026-09-28T20:00:00+09:00" -- TRON` 로 대회 중 커밋만 볼 수 있습니다.
 
 ## On-Chain Verification Proof (TRON Nile)
 

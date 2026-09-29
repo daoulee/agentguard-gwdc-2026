@@ -46,7 +46,7 @@ npm run build
 wrangler pages deploy dist --project-name tron-yield-studio-gwdc --branch main
 ```
 
-`functions/api/chat.ts`가 Pages Function으로 함께 배포됩니다. AI를 켜려면 Pages 프로젝트 설정에 `KILN_API_URL`, `KILN_API_KEY`(암호화), `KILN_MODEL`을 넣습니다. 넣지 않으면 공개 사이트는 규칙 기반으로 동작합니다.
+`functions/api/chat.ts`가 Pages Function으로 함께 배포됩니다. Pages 프로젝트에 `KILN_API_URL`, `KILN_API_KEY`, `KILN_MODEL`이 암호화 변수로 설정돼 있어(2026-09-29) 공개 사이트에서도 AI가 동작합니다. 함수는 이 사이트(및 localhost)에서 온 요청만 처리합니다(`Origin` 검사). 변수를 지우면 규칙 기반으로 동작합니다.
 
 ## On-Chain Verification Proof (TRON Nile)
 
